@@ -1,0 +1,103 @@
+import React from 'react';
+import { Play, RotateCcw, FileSpreadsheet, Building2, HelpCircle } from 'lucide-react';
+import { DesignProject } from '../../types/load';
+
+interface NavbarProps {
+  project: DesignProject;
+  onRunCalculation: () => void;
+  onResetToSample: (type: 'rc' | 'steel') => void;
+  activeTab: string;
+  onChangeTab: (tab: string) => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  project,
+  onRunCalculation,
+  onResetToSample,
+  activeTab,
+  onChangeTab,
+}) => {
+  const tabs = [
+    { id: 'soil', label: '1. 地盤・液状化' },
+    { id: 'spec', label: '2. 杭諸元・支持力' },
+    { id: 'arrangement', label: '3. 杭配置・底版' },
+    { id: 'loads', label: '4. 作用荷重' },
+    { id: 'stability', label: '5. 安定計算結果' },
+    { id: 'stress', label: '6. 断面・杭頭照査' },
+    { id: 'comparison', label: '7. 杭比較表' },
+    { id: 'report', label: '8. 構造計算書' },
+  ];
+
+  return (
+    <header className="no-print bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
+      {/* 上段：タイトル & アクションバー */}
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-gradient-to-tr from-blue-600 to-cyan-500 p-2 rounded-lg text-white shadow-md">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-black text-white tracking-wide">
+                道路橋示方書 杭基礎設計システム
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                H24道示 / 杭基礎設計便覧
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 font-medium truncate max-w-md">
+              {project.bridgeName} — {project.title}
+            </div>
+          </div>
+        </div>
+
+        {/* コントロールボタン群 */}
+        <div className="flex items-center gap-2.5">
+          {/* サンプル切り替え */}
+          <div className="flex items-center bg-slate-800 rounded p-0.5 border border-slate-700 text-xs">
+            <button
+              onClick={() => onResetToSample('rc')}
+              className="px-2.5 py-1 text-slate-300 hover:text-white rounded hover:bg-slate-700 transition-colors"
+              title="場所打ちRC杭モデルをロード"
+            >
+              場所打ち杭例
+            </button>
+            <button
+              onClick={() => onResetToSample('steel')}
+              className="px-2.5 py-1 text-slate-300 hover:text-white rounded hover:bg-slate-700 transition-colors"
+              title="鋼管杭斜杭モデルをロード"
+            >
+              鋼管杭例
+            </button>
+          </div>
+
+          {/* 計算実行ボタン */}
+          <button
+            onClick={onRunCalculation}
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-lg transition-all transform active:scale-95"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            一括計算実行 (F5)
+          </button>
+        </div>
+      </div>
+
+      {/* 下段：ナビゲーションタブバー */}
+      <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto border-t border-slate-800/80">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onChangeTab(tab.id)}
+            className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${
+              activeTab === tab.id
+                ? 'border-blue-500 text-blue-400 bg-blue-950/30'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </header>
+  );
+};
