@@ -15,7 +15,6 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
   footing,
   pileNodes,
   pileSpecs,
-  layers,
   width = 540,
   height = 580,
 }) => {
@@ -33,7 +32,8 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    ctx.fillStyle = '#0f172a';
+    // 背景クリア (白)
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
 
     if (viewMode === 'plan') {
@@ -45,10 +45,10 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
       const maxDim = Math.max(footing.lengthX, footing.lengthY) + 2.0;
       const scale = (Math.min(width, height) - 100) / maxDim;
 
-      // グリッド線
-      ctx.strokeStyle = '#1e293b';
+      // 方眼グリッド線 (ライトグレー)
+      ctx.strokeStyle = '#f1f5f9';
       ctx.lineWidth = 1;
-      for (let i = -10; i <= 10; i += 2) {
+      for (let i = -10; i <= 10; i += 1) {
         ctx.beginPath();
         ctx.moveTo(cx + i * scale, 30);
         ctx.lineTo(cx + i * scale, height - 30);
@@ -66,13 +66,13 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
       const fx = cx - fw / 2;
       const fy = cy - fh / 2;
 
-      ctx.fillStyle = 'rgba(51, 65, 85, 0.4)'; // slate-700
+      ctx.fillStyle = '#f8fafc';
       ctx.fillRect(fx, fy, fw, fh);
-      ctx.strokeStyle = '#60a5fa'; // blue-400
+      ctx.strokeStyle = '#2563eb'; // blue-600
       ctx.lineWidth = 2;
       ctx.strokeRect(fx, fy, fw, fh);
 
-      // 中心線 (十字)
+      // 中心線 (十字 鎖線)
       ctx.strokeStyle = '#94a3b8';
       ctx.lineWidth = 1;
       ctx.setLineDash([6, 4]);
@@ -85,8 +85,8 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
       ctx.setLineDash([]);
 
       // フーチング寸法表記
-      ctx.fillStyle = '#93c5fd';
-      ctx.font = '11px monospace';
+      ctx.fillStyle = '#1e40af';
+      ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(`Lx = ${footing.lengthX.toFixed(2)}m`, cx, fy - 8);
       ctx.textAlign = 'left';
@@ -101,16 +101,16 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
         const py = cy + pile.y * scale;
 
         // 杭円形
-        ctx.fillStyle = '#0284c7';
+        ctx.fillStyle = '#e0f2fe';
         ctx.beginPath();
         ctx.arc(px, py, pileRadius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
         ctx.stroke();
 
         // 杭番号 & 座標ラベル
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#0f172a';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -118,7 +118,7 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
 
         // 斜杭の場合矢印
         if (pile.inclinationAngle !== 0) {
-          ctx.strokeStyle = '#f59e0b';
+          ctx.strokeStyle = '#d97706';
           ctx.lineWidth = 2;
           ctx.beginPath();
           const arrowLen = pileRadius * 1.5;
@@ -141,14 +141,14 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
 
       // 地盤線 GL=0
       const glY = topY;
-      ctx.strokeStyle = '#22c55e'; // green-500
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#16a34a'; // green-600
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(30, glY);
       ctx.lineTo(width - 30, glY);
       ctx.stroke();
 
-      ctx.fillStyle = '#22c55e';
+      ctx.fillStyle = '#15803d';
       ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('GL ±0.0m (地表面)', 35, glY - 6);
@@ -159,19 +159,18 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
       const ftW = footing.lengthX * scaleX;
       const ftX = cx - ftW / 2;
 
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = '#e2e8f0';
       ctx.fillRect(ftX, ftTopY, ftW, ftBottomY - ftTopY);
-      ctx.strokeStyle = '#60a5fa';
+      ctx.strokeStyle = '#2563eb';
       ctx.lineWidth = 2;
       ctx.strokeRect(ftX, ftTopY, ftW, ftBottomY - ftTopY);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`フーチング Df=${footing.thickness}m`, cx, (ftTopY + ftBottomY) / 2 + 4);
 
       // 各杭の立面描画
-      // X座標ごとにグループ化して代表描画
       const uniqueX = Array.from(new Set(pileNodes.map((p) => p.x)));
       uniqueX.forEach((xCoord) => {
         const matchingPiles = pileNodes.filter((p) => p.x === xCoord && !p.isOmitted);
@@ -188,8 +187,8 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
         const thetaRad = (pile.inclinationAngle * Math.PI) / 180;
         const pileTipX = pileHeadX + Math.sin(thetaRad) * (pSpec.length * scaleY);
 
-        ctx.fillStyle = '#0284c7';
-        ctx.strokeStyle = '#38bdf8';
+        ctx.fillStyle = '#bae6fd';
+        ctx.strokeStyle = '#0284c7';
         ctx.lineWidth = 1.5;
 
         // 杭柱描画
@@ -203,8 +202,8 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
         ctx.stroke();
 
         // 杭長注記
-        ctx.fillStyle = '#7dd3fc';
-        ctx.font = '10px monospace';
+        ctx.fillStyle = '#0369a1';
+        ctx.font = 'bold 10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(`L=${pSpec.length}m φ${(pSpec.diameter * 1000).toFixed(0)}`, pileHeadX, (pileHeadY + pileTipY) / 2);
       });
@@ -212,25 +211,25 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
   }, [footing, pileNodes, pileSpecs, viewMode, width, height]);
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 shadow-md flex flex-col items-center">
-      <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
-        <span className="text-xs font-bold tracking-wider text-slate-300 uppercase flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+    <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-md flex flex-col items-center">
+      <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
+        <span className="text-xs font-bold tracking-wider text-slate-700 uppercase flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
           杭基礎 CAD図面プレビュー
         </span>
-        <div className="flex bg-slate-800 p-0.5 rounded border border-slate-700">
+        <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200">
           <button
             onClick={() => setViewMode('plan')}
-            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-              viewMode === 'plan' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+            className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
+              viewMode === 'plan' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             平面図 (Plan)
           </button>
           <button
             onClick={() => setViewMode('elevation')}
-            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-              viewMode === 'elevation' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+            className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
+              viewMode === 'elevation' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             立面図 (Elevation)
@@ -240,7 +239,7 @@ export const PileArrangementCanvas: React.FC<PileArrangementCanvasProps> = ({
       <canvas
         ref={canvasRef}
         style={{ width: `${width}px`, height: `${height}px` }}
-        className="rounded border border-slate-800"
+        className="rounded border border-slate-200"
       />
     </div>
   );

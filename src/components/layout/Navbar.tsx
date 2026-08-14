@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, RotateCcw, FileSpreadsheet, Building2, HelpCircle } from 'lucide-react';
+import { Play, Building2 } from 'lucide-react';
 import { DesignProject } from '../../types/load';
 
 interface NavbarProps {
@@ -29,23 +29,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="no-print bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
+    <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
       {/* 上段：タイトル & アクションバー */}
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-tr from-blue-600 to-cyan-500 p-2 rounded-lg text-white shadow-md">
+          <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2 rounded-lg text-white shadow-md">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-base font-black text-white tracking-wide">
+              <span className="text-base font-black text-slate-900 tracking-wide">
                 道路橋示方書 杭基礎設計システム
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                 H24道示 / 杭基礎設計便覧
               </span>
             </div>
-            <div className="text-xs text-slate-400 font-medium truncate max-w-md">
+            <div className="text-xs text-slate-500 font-medium truncate max-w-md">
               {project.bridgeName} — {project.title}
             </div>
           </div>
@@ -54,17 +54,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* コントロールボタン群 */}
         <div className="flex items-center gap-2.5">
           {/* サンプル切り替え */}
-          <div className="flex items-center bg-slate-800 rounded p-0.5 border border-slate-700 text-xs">
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200 text-xs">
             <button
               onClick={() => onResetToSample('rc')}
-              className="px-2.5 py-1 text-slate-300 hover:text-white rounded hover:bg-slate-700 transition-colors"
+              className="px-2.5 py-1 text-slate-700 hover:text-blue-600 font-medium rounded hover:bg-white transition-all"
               title="場所打ちRC杭モデルをロード"
             >
               場所打ち杭例
             </button>
             <button
               onClick={() => onResetToSample('steel')}
-              className="px-2.5 py-1 text-slate-300 hover:text-white rounded hover:bg-slate-700 transition-colors"
+              className="px-2.5 py-1 text-slate-700 hover:text-blue-600 font-medium rounded hover:bg-white transition-all"
               title="鋼管杭斜杭モデルをロード"
             >
               鋼管杭例
@@ -74,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 計算実行ボタン */}
           <button
             onClick={onRunCalculation}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-lg transition-all transform active:scale-95"
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-md transition-all transform active:scale-95"
           >
             <Play className="w-4 h-4 fill-white" />
             一括計算実行 (F5)
@@ -83,15 +83,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* 下段：ナビゲーションタブバー */}
-      <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto border-t border-slate-800/80">
+      <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto border-t border-slate-100">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => onChangeTab(tab.id)}
             className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap transition-all border-b-2 ${
               activeTab === tab.id
-                ? 'border-blue-500 text-blue-400 bg-blue-950/30'
-                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
             {tab.label}

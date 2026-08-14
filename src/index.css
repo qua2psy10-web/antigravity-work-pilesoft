@@ -4,32 +4,33 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased selection:bg-blue-600 selection:text-white;
+    @apply bg-slate-100 text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white;
   }
 }
 
-/* カスタムスクロールバー */
+/* カスタムスクロールバー (ライトモード) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(241, 245, 249, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.8);
+  background: rgba(148, 163, 184, 0.8);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 1);
 }
 
-/* 土木CAD/エンジニアリングUI用グリッドパターン背景 */
+/* 土木CAD/エンジニアリングUI用グリッドパターン背景 (ライトモード) */
 .engineering-grid {
+  background-color: #f8fafc;
   background-size: 24px 24px;
   background-image: 
-    linear-gradient(to right, rgba(51, 65, 85, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(51, 65, 85, 0.2) 1px, transparent 1px);
+    linear-gradient(to right, rgba(203, 213, 225, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(203, 213, 225, 0.4) 1px, transparent 1px);
 }
 
 /* 印刷用スタイル */

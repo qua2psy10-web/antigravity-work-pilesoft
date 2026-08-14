@@ -17,7 +17,6 @@ export function App() {
   const [activeTab, setActiveTab] = useState<string>('soil');
   const [results, setResults] = useState<CalculationResult[]>([]);
 
-  // 初期ロード時および計算実行時に一括解析を実行
   const handleCalculate = () => {
     try {
       const res = runFullDesignCalculation(
@@ -50,7 +49,7 @@ export function App() {
   const pileTipDepth = projectData.footing.depthGL + (pileSpec?.length || 18.0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans engineering-grid">
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans engineering-grid">
       {/* ナビゲーションバー */}
       <Navbar
         project={projectData.project}
@@ -129,7 +128,7 @@ export function App() {
       </main>
 
       {/* フッター (印刷時非表示) */}
-      <footer className="no-print border-t border-slate-800/80 bg-slate-950/80 py-3 text-center text-xs text-slate-500">
+      <footer className="no-print border-t border-slate-200 bg-white/90 py-3 text-center text-xs text-slate-500">
         道路橋示方書・同解説 IV下部構造編 / V耐震設計編 準拠 杭基礎設計システム &copy; 2026
       </footer>
     </div>
