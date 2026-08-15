@@ -1,6 +1,7 @@
 import { SoilLayer } from '../types/soil';
 import { PileSpecification, FootingDimension, PileHeadJointType } from '../types/pile';
 import { PileHeadSpringMatrix } from '../types/calculation';
+import { SeismicReductionLevel } from './bearingCapacity';
 
 /**
  * 水平方向地盤反力係数 kH、杭特性値 β、および杭頭バネマトリックス (K1〜K4) の算定
@@ -12,11 +13,19 @@ export function calculateSubgradeReactionAndSprings(
   layers: SoilLayer[],
   footing: FootingDimension,
   jointType: PileHeadJointType = 'rigid',
-  isSeismic: boolean = false,
+  seismicReduction: SeismicReductionLevel | boolean = 'none',
   kvValue?: number
 ): PileHeadSpringMatrix {
+  const reductionLevel: SeismicReductionLevel = seismicReduction === true
+    ? 'l1'
+    : seismicReduction === false
+      ? 'none'
+      : seismicReduction;
   const D = spec.diameter;
   const EI = spec.modulusE * spec.momentOfInertiaI; // 杭の曲げ剛性 EI (kN·m²)
+  if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(EI) || EI <= 0) {
+    throw new Error('杭径、ヤング係数、断面二次モーメントは 0 より大きい有限値で入力してください');
+  }
   const pileHeadDepth = footing.depthGL;
 
   // 地盤の変形係数 E0 (kN/m²) の算定 (道示IV: E0 = 2800 N など)
@@ -24,7 +33,7 @@ export function calculateSubgradeReactionAndSprings(
   let beta = 0.25; // 初期仮定 β (m⁻¹)
   let kh = 10000;  // 初期仮定 kH (kN/m³)
 
-  const alpha = isSeismic ? 2.0 : 1.0; // 地震時の変形係数割増
+  const alpha = reductionLevel === 'none' ? 1.0 : 2.0; // 地震時の変形係数割増
 
   for (let iter = 0; iter < 10; iter++) {
     const depth1Beta = 1.0 / beta;
@@ -42,7 +51,11 @@ export function calculateSubgradeReactionAndSprings(
 
       if (li <= 0) continue;
 
-      const de = isSeismic ? (layer.deLevel1 ?? 1.0) : 1.0;
+      const de = reductionLevel === 'none'
+        ? 1.0
+        : reductionLevel === 'l2'
+          ? (layer.deLevel2 ?? 1.0)
+          : (layer.deLevel1 ?? 1.0);
       
       // 土質に応じた E0 算定 (道示IV 表-5.4.1)
       let E0 = 2800 * layer.nValue;
@@ -80,10 +93,10 @@ export function calculateSubgradeReactionAndSprings(
   }
 
   // 杭頭バネ定数 (K1〜K4) の算定 (Changの式)
-  let k1 = 0;
-  let k2 = 0;
-  let k3 = 0;
-  let k4 = 0;
+  let k1: number;
+  let k2: number;
+  let k3: number;
+  let k4: number;
 
   if (jointType === 'rigid') {
     // 杭頭剛結

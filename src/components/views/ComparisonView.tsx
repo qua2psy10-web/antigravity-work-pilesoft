@@ -1,6 +1,7 @@
 import React from 'react';
 import { ProjectData } from '../../samples/defaultProjects';
 import { calculateBearingCapacity } from '../../engine/bearingCapacity';
+import { PileSpecification } from '../../types/pile';
 import { BarChart3, CheckCircle } from 'lucide-react';
 
 interface ComparisonViewProps {
@@ -74,16 +75,25 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {comparisonOptions.map((opt) => {
-            const mockSpec: any = {
+            const isSteelPipe = opt.type === 'steel_pipe';
+            const effectiveThickness = isSteelPipe ? 0.011 : 0;
+            const innerDiameter = Math.max(0, opt.diameter - 2 * effectiveThickness);
+            const mockSpec: PileSpecification = {
               id: opt.id,
               pileType: opt.type,
               method: opt.method,
               bearingType: 'end_bearing',
               diameter: opt.diameter,
               length: opt.length,
-              modulusE: 2.5e7,
-              crossSectionAreaA: (Math.PI * opt.diameter ** 2) / 4,
-              momentOfInertiaI: (Math.PI * Math.pow(opt.diameter, 4)) / 64,
+              modulusE: isSteelPipe ? 2.0e8 : 2.5e7,
+              wallThickness: isSteelPipe ? 12 : undefined,
+              corrosionAllowance: isSteelPipe ? 1 : undefined,
+              crossSectionAreaA: isSteelPipe
+                ? (Math.PI * (opt.diameter ** 2 - innerDiameter ** 2)) / 4
+                : (Math.PI * opt.diameter ** 2) / 4,
+              momentOfInertiaI: isSteelPipe
+                ? (Math.PI * (opt.diameter ** 4 - innerDiameter ** 4)) / 64
+                : (Math.PI * Math.pow(opt.diameter, 4)) / 64,
             };
             const bearing = calculateBearingCapacity(mockSpec, ground.layers, footing, false);
             const totalCost = opt.count * opt.length * opt.unitCostPerMeter;

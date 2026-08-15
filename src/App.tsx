@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { defaultProject, steelPileSampleProject, ProjectData } from './samples/defaultProjects';
 import { runFullDesignCalculation } from './engine';
 import { CalculationResult } from './types/calculation';
@@ -15,27 +15,31 @@ import { ReportView } from './components/views/ReportView';
 export function App() {
   const [projectData, setProjectData] = useState<ProjectData>(defaultProject);
   const [activeTab, setActiveTab] = useState<string>('soil');
-  const [results, setResults] = useState<CalculationResult[]>([]);
+  const calculation = useMemo((): { results: CalculationResult[]; errorMessage?: string } => {
+    try {
+      return {
+        results: runFullDesignCalculation(
+          projectData.ground,
+          projectData.pileSpecs,
+          projectData.pileNodes,
+          projectData.footing,
+          projectData.loadCases
+        ),
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '不明な計算エラーです';
+      console.error('Calculation Error:', error);
+      return { results: [], errorMessage };
+    }
+  }, [projectData]);
+
+  const results = calculation.results;
 
   const handleCalculate = () => {
-    try {
-      const res = runFullDesignCalculation(
-        projectData.ground,
-        projectData.pileSpecs,
-        projectData.pileNodes,
-        projectData.footing,
-        projectData.loadCases
-      );
-      setResults(res);
-    } catch (err: any) {
-      console.error('Calculation Error:', err);
-      alert(`計算エラーが発生しました: ${err.message}`);
+    if (calculation.errorMessage) {
+      alert(`計算エラーが発生しました: ${calculation.errorMessage}`);
     }
   };
-
-  useEffect(() => {
-    handleCalculate();
-  }, [projectData]);
 
   const handleResetToSample = (type: 'rc' | 'steel') => {
     if (type === 'rc') {
@@ -129,7 +133,7 @@ export function App() {
 
       {/* フッター (印刷時非表示) */}
       <footer className="no-print border-t border-slate-200 bg-white/90 py-3 text-center text-xs text-slate-500">
-        道路橋示方書・同解説 IV下部構造編 / V耐震設計編 準拠 杭基礎設計システム &copy; 2026
+        道路橋示方書・同解説 IV下部構造編 / V耐震設計編 参照・簡易照査システム &copy; 2026
       </footer>
     </div>
   );

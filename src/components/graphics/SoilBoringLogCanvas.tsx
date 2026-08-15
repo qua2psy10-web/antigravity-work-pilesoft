@@ -84,7 +84,7 @@ export const SoilBoringLogCanvas: React.FC<SoilBoringLogCanvasProps> = ({
 
       // 土質ごとの色設定 (ライトテーマ用パステル系)
       let soilColor = '#f8fafc';
-      let textColor = '#0f172a';
+      const textColor = '#0f172a';
       if (layer.soilType === 'clay') {
         soilColor = '#e0f2fe'; // 粘土 (明るいスカイブルー)
       } else if (layer.soilType === 'sand') {
@@ -218,7 +218,7 @@ export const SoilBoringLogCanvas: React.FC<SoilBoringLogCanvasProps> = ({
           <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
           地盤柱状図・N値プロファイル
         </span>
-        <span className="text-[11px] text-slate-500 font-medium">道示IV / V 準拠</span>
+        <span className="text-[11px] text-slate-500 font-medium">道示IV / V 参照・簡易照査</span>
       </div>
       <canvas
         ref={canvasRef}

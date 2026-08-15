@@ -4,6 +4,32 @@ import { GroundCondition } from '../../types/soil';
 import { calculateBearingCapacity } from '../../engine/bearingCapacity';
 import { Layers, Activity, CheckCircle, Info } from 'lucide-react';
 
+function calculateCircularSectionProperties(spec: PileSpecification): Pick<PileSpecification, 'crossSectionAreaA' | 'momentOfInertiaI'> {
+  const D = spec.diameter;
+  if (spec.pileType === 'cast_in_place_rc' || spec.pileType === 'phc') {
+    return {
+      crossSectionAreaA: (Math.PI * D ** 2) / 4.0,
+      momentOfInertiaI: (Math.PI * D ** 4) / 64.0,
+    };
+  }
+
+  if (spec.pileType === 'steel_pipe' || spec.pileType === 'steel_soil_cement' || spec.pileType === 'rotary_steel') {
+    const wallThickness = spec.wallThickness ?? 12.0;
+    const corrosionAllowance = spec.corrosionAllowance ?? 0.0;
+    const effectiveThickness = Math.max(0, (wallThickness - corrosionAllowance) / 1000);
+    const innerDiameter = Math.max(0, D - 2.0 * effectiveThickness);
+    return {
+      crossSectionAreaA: (Math.PI * (D ** 2 - innerDiameter ** 2)) / 4.0,
+      momentOfInertiaI: (Math.PI * (D ** 4 - innerDiameter ** 4)) / 64.0,
+    };
+  }
+
+  return {
+    crossSectionAreaA: spec.crossSectionAreaA,
+    momentOfInertiaI: spec.momentOfInertiaI,
+  };
+}
+
 interface PileSpecViewProps {
   pileSpecs: { [id: string]: PileSpecification };
   onChangeSpecs: (specs: { [id: string]: PileSpecification }) => void;
@@ -24,25 +50,16 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
 
   const bearingNormal = calculateBearingCapacity(spec, ground.layers, footing, false);
   const bearingSeismic = calculateBearingCapacity(spec, ground.layers, footing, true);
+  const normalBearingFactor = spec.bearingType === 'friction' ? 4.0 : 3.0;
+  const seismicBearingFactor = spec.bearingType === 'friction' ? 3.0 : 2.0;
 
   const handleUpdate = (updated: Partial<PileSpecification>) => {
-    let newI = spec.momentOfInertiaI;
-    let newA = spec.crossSectionAreaA;
-
-    if (updated.diameter !== undefined) {
-      const D = updated.diameter;
-      if (spec.pileType === 'cast_in_place_rc' || spec.pileType === 'phc') {
-        newA = (Math.PI * D * D) / 4.0;
-        newI = (Math.PI * Math.pow(D, 4)) / 64.0;
-      }
-    }
-
-    const newSpec = {
+    const updatedSpec = {
       ...spec,
       ...updated,
-      crossSectionAreaA: newA,
-      momentOfInertiaI: newI,
     };
+    const sectionProperties = calculateCircularSectionProperties(updatedSpec);
+    const newSpec = { ...updatedSpec, ...sectionProperties };
 
     onChangeSpecs({
       ...pileSpecs,
@@ -216,8 +233,11 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                 <input
                   type="number"
                   step="1"
-                  value={spec.wallThickness || 12}
-                  onChange={(e) => handleUpdate({ wallThickness: parseFloat(e.target.value) || 12 })}
+                  value={spec.wallThickness ?? 12}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    handleUpdate({ wallThickness: Number.isFinite(value) ? Math.max(0, value) : 12 });
+                  }}
                   className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -226,8 +246,11 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                 <input
                   type="number"
                   step="0.5"
-                  value={spec.corrosionAllowance || 1.0}
-                  onChange={(e) => handleUpdate({ corrosionAllowance: parseFloat(e.target.value) || 1.0 })}
+                  value={spec.corrosionAllowance ?? 0}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    handleUpdate({ corrosionAllowance: Number.isFinite(value) ? Math.max(0, value) : 0 });
+                  }}
                   className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -262,7 +285,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
             {/* 常時支持力 */}
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
               <div className="text-slate-700 font-bold mb-2 flex items-center justify-between">
-                <span>【常時】支持力照査値 (安全率 n=3.0)</span>
+                <span>【常時】支持力照査値 (安全率 n={normalBearingFactor.toFixed(1)})</span>
                 <span className="text-blue-700 font-bold">Normal Case</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-slate-700 font-mono">
@@ -284,7 +307,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
             {/* 地震時支持力 */}
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
               <div className="text-slate-700 font-bold mb-2 flex items-center justify-between">
-                <span>【地震時】支持力照査値 (安全率 n=2.0)</span>
+                <span>【暴風時・L1地震時】支持力照査値 (安全率 n={seismicBearingFactor.toFixed(1)})</span>
                 <span className="text-amber-700 font-bold">Seismic Case</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-slate-700 font-mono">

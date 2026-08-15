@@ -66,7 +66,9 @@ export const StabilityResultView: React.FC<StabilityResultViewProps> = ({
             {currentResult.footingDisplacement.deltaX.toFixed(2)}{' '}
             <span className="text-xs font-normal text-slate-500">mm</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1">許容値: &le; 30.0 mm (OK)</div>
+          <div className="text-[11px] text-slate-500 mt-1">
+            許容値: &le; {currentResult.allowableDisplacementMm.toFixed(1)} mm
+          </div>
         </div>
 
         {/* 鉛直変位 */}
@@ -89,7 +91,7 @@ export const StabilityResultView: React.FC<StabilityResultViewProps> = ({
             <span className="text-xs font-normal text-slate-500">kN</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
-            許容 Ra: {currentResult.bearingCapacity.raSeismic.toLocaleString()} kN
+            許容 Ra: {currentResult.allowableBearingKn.toLocaleString()} kN
           </div>
         </div>
 

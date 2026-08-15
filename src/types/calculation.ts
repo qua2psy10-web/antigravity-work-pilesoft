@@ -1,4 +1,5 @@
 // 計算および照査結果の型定義
+import type { LoadCaseType } from './load';
 
 export interface PileHeadSpringMatrix {
   k1: number; // 水平変位による水平力 K1 (kN/m)
@@ -45,10 +46,10 @@ export interface BearingCapacityResult {
   qp: number;           // 先端極限支持力 Qp = qd * Ap (kN)
   qs: number;           // 周面摩擦極限支持力 Qs = U * Σ(fi * Li) (kN)
   ru: number;           // 押込み極限支持力 Ru = Qp + Qs (kN)
-  raNormal: number;     // 常時許容押込み力 (kN, Ru/3)
-  raSeismic: number;    // 地震時許容押込み力 (kN, Ru/2)
-  rpaNormal: number;    // 常時許容引抜き力 (kN, (1/3)*Wp + (1/6)*Qs)
-  rpaSeismic: number;   // 地震時許容引抜き力 (kN, Wp + (1/3)*Qs)
+  raNormal: number;     // 常時許容押込み力 (kN, 支持杭 Ru/3・摩擦杭 Ru/4)
+  raSeismic: number;    // 暴風時・L1地震時許容押込み力 (kN, 支持杭 Ru/2・摩擦杭 Ru/3)
+  rpaNormal: number;    // 常時許容引抜き力 (kN, Wp + Qs/6)
+  rpaSeismic: number;   // 暴風時・L1地震時許容引抜き力 (kN, Wp + Qs/3)
   kv: number;           // 軸方向反力係数 Kv (kN/m)
   pileWeightWp: number; // 杭自重 Wp (kN)
 }
@@ -91,9 +92,20 @@ export interface PileHeadJointCheckResult {
   isPass: boolean;
 }
 
+export interface PileCapacityCheckResult {
+  pileNodeId: string;
+  pileSpecId: string;
+  axialForceP: number;
+  allowableBearing: number;
+  allowablePullout: number;
+  isBearingOk: boolean;
+  isPulloutOk: boolean;
+}
+
 export interface CalculationResult {
   loadCaseId: string;
   loadCaseName: string;
+  loadCaseType: LoadCaseType;
   springMatrix: PileHeadSpringMatrix;
   footingDisplacement: FootingDisplacement;
   pileReactions: PileHeadReaction[];
@@ -101,6 +113,10 @@ export interface CalculationResult {
   bearingCapacity: BearingCapacityResult;
   sectionChecks: SectionStressCheckResult[];
   jointChecks: PileHeadJointCheckResult[];
+  pileCapacityChecks: PileCapacityCheckResult[];
+  allowableBearingKn: number;
+  allowablePulloutKn: number;
+  allowableDisplacementMm: number;
   maxDisplacementMm: number;
   maxAxialCompressionKn: number;
   maxAxialTensionKn: number;

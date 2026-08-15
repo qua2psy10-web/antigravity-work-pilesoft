@@ -44,6 +44,7 @@ export function calculateLiquefaction(
     // 3. 砂質土(S) または 礫質土(G)
     // 4. 細粒分含有率 Fc <= 35% または 塑性指数 Ip < 15
     const isCandidate = 
+      layer.isLiquefiable === true &&
       isBelowWater &&
       midDepth <= 20 &&
       (layer.soilType === 'sand' || layer.soilType === 'gravel');

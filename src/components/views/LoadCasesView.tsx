@@ -84,6 +84,7 @@ export const LoadCasesView: React.FC<LoadCasesViewProps> = ({
                 </th>
                 <th className="py-3 px-3">応力度割増</th>
                 <th className="py-3 px-3">支持力安全率 n</th>
+                <th className="py-3 px-3">引抜き安全率 n</th>
                 <th className="py-3 px-3">許容変位 (mm)</th>
                 <th className="py-3 px-3 text-center">削除</th>
               </tr>
@@ -153,6 +154,15 @@ export const LoadCasesView: React.FC<LoadCasesViewProps> = ({
                       step="0.5"
                       value={lc.safetyFactorBearing}
                       onChange={(e) => handleUpdate(index, { safetyFactorBearing: parseFloat(e.target.value) || 3.0 })}
+                      className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-slate-900 font-mono text-xs w-16 focus:outline-none focus:border-blue-500"
+                    />
+                  </td>
+                  <td className="py-3 px-3">
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={lc.safetyFactorPullout}
+                      onChange={(e) => handleUpdate(index, { safetyFactorPullout: parseFloat(e.target.value) || 3.0 })}
                       className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-slate-900 font-mono text-xs w-16 focus:outline-none focus:border-blue-500"
                     />
                   </td>
