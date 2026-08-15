@@ -20,6 +20,9 @@ export function checkPileSectionStress(
   const D = spec.diameter; // m
   const A = spec.crossSectionAreaA; // m²
   const I = spec.momentOfInertiaI;   // m⁴
+  if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(A) || A <= 0 || !Number.isFinite(I) || I <= 0) {
+    throw new Error('断面照査には杭径、断面積、断面二次モーメントの正しい入力が必要です');
+  }
   const Z = (2.0 * I) / D;           // 断面係数 Z = I / (D/2) (m³)
 
   const notes: string[] = [];
@@ -30,24 +33,25 @@ export function checkPileSectionStress(
     const fck = spec.concreteStrengthFck || 24.0; // N/mm²
     
     // 基本許容応力度 (道示IV)
-    const baseSigCa = fck / 3.0; // 例: 24/3 = 8.0 N/mm²
-    const baseSigSa = 180.0;     // SD345: 180 N/mm²
-    const baseTauA = 0.36;       // コンクリートせん断許容: 0.36 N/mm²
+    const baseSigCa = spec.allowableCompressiveStress ?? fck / 3.0;
+    const baseSigSa = spec.allowableTensileStress ?? 180.0;
+    const baseTauA = spec.allowableShearStress ?? 0.36;
 
     const allowableSigCa = baseSigCa * stressFactor;
     const allowableSigSa = baseSigSa * stressFactor;
     const allowableTauA = baseTauA * stressFactor;
 
     // 断面力 (単位変換: kN -> N, m -> mm)
-    const N_N = Math.abs(axialForceN) * 1000;
+    const N_N = axialForceN * 1000; // 圧縮正・引抜負を保持する
     const M_Nmm = Math.abs(maxMomentM) * 1e6;
     const S_N = Math.abs(maxShearForceS) * 1000;
     const A_mm2 = A * 1e6;
     const Z_mm3 = Z * 1e9;
 
     // 換算全断面での応力度略算 (道示実務簡便法)
-    const sig_c = (N_N / A_mm2) + (M_Nmm / Z_mm3);
-    const sig_s = (M_Nmm / (Z_mm3 * 0.8)) - (N_N / A_mm2);
+    const axialStress = N_N / A_mm2;
+    const sig_c = Math.max(0, axialStress + (M_Nmm / Z_mm3));
+    const sig_s = (M_Nmm / (Z_mm3 * 0.8)) - axialStress;
     const tau = (4.0 * S_N) / (3.0 * A_mm2);
 
     const sigC_val = parseFloat(sig_c.toFixed(2));
@@ -90,18 +94,23 @@ export function checkPileSectionStress(
     };
   } else {
     // === 鋼管杭 / H形鋼杭の照査 ===
-    const baseSteelSigA = 140.0; // SKK400: 140 N/mm²
-    const baseSteelTauA = 80.0;  // 80 N/mm²
+    const baseSteelSigA = spec.allowableCompressiveStress ?? 140.0;
+    const baseSteelTauA = spec.allowableShearStress ?? 80.0;
     const allowableSteelSigA = baseSteelSigA * stressFactor;
     const allowableSteelTauA = baseSteelTauA * stressFactor;
 
-    const N_N = Math.abs(axialForceN) * 1000;
+    const N_N = axialForceN * 1000;
     const M_Nmm = Math.abs(maxMomentM) * 1e6;
     const S_N = Math.abs(maxShearForceS) * 1000;
     const A_mm2 = A * 1e6;
     const Z_mm3 = Z * 1e9;
 
-    const sigma = (N_N / A_mm2) + (M_Nmm / Z_mm3);
+    const axialStress = N_N / A_mm2;
+    const bendingStress = M_Nmm / Z_mm3;
+    const sigma = Math.max(
+      Math.abs(axialStress + bendingStress),
+      Math.abs(axialStress - bendingStress)
+    );
     const tau = (2.0 * S_N) / A_mm2;
 
     const sig_val = parseFloat(sigma.toFixed(2));

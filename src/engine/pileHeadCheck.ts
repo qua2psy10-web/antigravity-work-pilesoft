@@ -20,6 +20,9 @@ export function checkPileHeadJoint(
   const fckFooting = footing.concreteStrengthFck || 24.0;
   const D = spec.diameter;
   const h = footing.thickness - 0.1; // 有効高さ (m)
+  if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(h) || h <= 0) {
+    throw new Error('杭頭照査には正の杭径と有効なフーチング厚が必要です');
+  }
 
   // 1. 押抜きせん断応力度 τp (N/mm²)
   // 円錐面周長 u = π * (D + h)
@@ -37,16 +40,14 @@ export function checkPileHeadJoint(
   const allowableSigmaB = 0.3 * fckFooting * stressFactor; // 例: 0.3 * 24 = 7.2 N/mm²
 
   // 3. 仮想RC断面応力比 (略算)
-  const virtualRcStressRatio = Math.min(
-    1.5,
-    Math.max(
-      tau_p / allowableTauP,
-      sigma_b / allowableSigmaB,
-      Math.abs(momentM) / (0.8 * D * 1000)
-    )
+  const virtualRcStressRatioRaw = Math.max(
+    tau_p / allowableTauP,
+    sigma_b / allowableSigmaB,
+    Math.abs(momentM) / (0.8 * D * 1000)
   );
+  const virtualRcStressRatio = Math.min(1.5, virtualRcStressRatioRaw);
 
-  const isPass = tau_p <= allowableTauP && sigma_b <= allowableSigmaB;
+  const isPass = tau_p <= allowableTauP && sigma_b <= allowableSigmaB && virtualRcStressRatioRaw <= 1.0;
 
   return {
     loadCaseId: loadCase.id,

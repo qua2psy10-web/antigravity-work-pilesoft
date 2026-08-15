@@ -1,7 +1,7 @@
 import React from 'react';
 import { ProjectData } from '../../samples/defaultProjects';
 import { CalculationResult } from '../../types/calculation';
-import { Printer, Download, CheckCircle, FileText } from 'lucide-react';
+import { Printer, Download, FileText } from 'lucide-react';
 
 interface ReportViewProps {
   projectData: ProjectData;
@@ -14,6 +14,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
 }) => {
   const { project, ground, pileSpecs, footing } = projectData;
   const spec = Object.values(pileSpecs)[0];
+  const standardLabel = project.standard === 'R01_DOUJI'
+    ? '道路橋示方書・同解説（令和元年版：式の適合確認が必要）'
+    : '道路橋示方書・同解説（平成24年3月版）';
+  const normalBearingFactor = spec.bearingType === 'friction' ? 4.0 : 3.0;
+  const seismicBearingFactor = spec.bearingType === 'friction' ? 3.0 : 2.0;
+  const normalCapacity = results.find((result) => result.loadCaseType === 'normal')?.bearingCapacity;
+  const seismicCapacity = results.find((result) => result.loadCaseType === 'seismic_l1')?.bearingCapacity;
+  const allCasesPass = results.length > 0 && results.every((result) => result.isStable);
 
   const handlePrint = () => {
     window.print();
@@ -59,7 +67,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       <div className="bg-white text-slate-900 rounded-lg p-8 sm:p-12 shadow-2xl max-w-4xl mx-auto font-sans leading-relaxed text-xs">
         {/* 表紙・ヘッダー */}
         <div className="border-b-2 border-slate-900 pb-6 mb-8 text-center">
-          <div className="text-sm font-bold text-slate-600 mb-1">【道路橋示方書・同解説 IV下部構造編・V耐震設計編 準拠】</div>
+          <div className="text-sm font-bold text-slate-600 mb-1">【{standardLabel} 参照・自動照査結果】</div>
           <h1 className="text-2xl font-black tracking-widest text-slate-950 mb-4">{project.title}</h1>
           <div className="flex justify-center gap-8 text-slate-700 font-mono text-xs">
             <div>構造物名: {project.bridgeName}</div>
@@ -79,8 +87,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <table className="w-full border-collapse border border-slate-300">
                 <tbody>
                   <tr className="border-b border-slate-300">
-                    <td className="bg-slate-50 p-2 font-bold w-1/3">準拠基準</td>
-                    <td className="p-2">道路橋示方書 (平成24年3月)</td>
+                    <td className="bg-slate-50 p-2 font-bold w-1/3">参照基準</td>
+                    <td className="p-2">{standardLabel}</td>
                   </tr>
                   <tr className="border-b border-slate-300">
                     <td className="bg-slate-50 p-2 font-bold">地盤種別</td>
@@ -132,7 +140,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
             2. 支持力計算結果 (道示IV 第5章)
           </h2>
 
-          {results[0] && (
+          {normalCapacity && seismicCapacity && (
             <table className="w-full border-collapse border border-slate-300 text-center font-mono">
               <thead className="bg-slate-100 font-bold font-sans">
                 <tr className="border-b border-slate-300">
@@ -148,21 +156,21 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <tbody>
                 <tr className="border-b border-slate-300">
                   <td className="p-2 font-sans font-bold">常時 (Normal)</td>
-                  <td className="p-2">{results[0].bearingCapacity.qp.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.qs.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.ru.toLocaleString()}</td>
-                  <td className="p-2">3.0</td>
-                  <td className="p-2 font-bold text-blue-900">{results[0].bearingCapacity.raNormal.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.rpaNormal.toLocaleString()}</td>
+                  <td className="p-2">{normalCapacity.qp.toLocaleString()}</td>
+                  <td className="p-2">{normalCapacity.qs.toLocaleString()}</td>
+                  <td className="p-2">{normalCapacity.ru.toLocaleString()}</td>
+                  <td className="p-2">{normalBearingFactor.toFixed(1)}</td>
+                  <td className="p-2 font-bold text-blue-900">{normalCapacity.raNormal.toLocaleString()}</td>
+                  <td className="p-2">{normalCapacity.rpaNormal.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-2 font-sans font-bold">地震時 (Seismic)</td>
-                  <td className="p-2">{results[0].bearingCapacity.qp.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.qs.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.ru.toLocaleString()}</td>
-                  <td className="p-2">2.0</td>
-                  <td className="p-2 font-bold text-blue-900">{results[0].bearingCapacity.raSeismic.toLocaleString()}</td>
-                  <td className="p-2">{results[0].bearingCapacity.rpaSeismic.toLocaleString()}</td>
+                  <td className="p-2">{seismicCapacity.qp.toLocaleString()}</td>
+                  <td className="p-2">{seismicCapacity.qs.toLocaleString()}</td>
+                  <td className="p-2">{seismicCapacity.ru.toLocaleString()}</td>
+                  <td className="p-2">{seismicBearingFactor.toFixed(1)}</td>
+                  <td className="p-2 font-bold text-blue-900">{seismicCapacity.raSeismic.toLocaleString()}</td>
+                  <td className="p-2">{seismicCapacity.rpaSeismic.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
@@ -189,16 +197,18 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </thead>
             <tbody>
               {results.map((res) => {
-                const maxCheck = res.sectionChecks[0];
+                const maxCheck = res.sectionChecks.reduce((governing, check) =>
+                  !governing || Math.abs(check.maxMomentM) > Math.abs(governing.maxMomentM)
+                    ? check
+                    : governing,
+                undefined as typeof res.sectionChecks[number] | undefined);
                 return (
                   <tr key={res.loadCaseId} className="border-b border-slate-300">
                     <td className="p-2 font-sans text-left font-bold">{res.loadCaseName}</td>
                     <td className="p-2">{res.footingDisplacement.deltaX.toFixed(2)}</td>
                     <td className="p-2 font-bold">{res.maxAxialCompressionKn.toLocaleString()}</td>
                     <td className="p-2 text-slate-600">
-                      {res.loadCaseId.includes('seismic')
-                        ? res.bearingCapacity.raSeismic.toLocaleString()
-                        : res.bearingCapacity.raNormal.toLocaleString()}
+                      {res.allowableBearingKn.toLocaleString()}
                     </td>
                     <td className="p-2">{maxCheck?.maxMomentM.toFixed(1) || '-'}</td>
                     <td className="p-2">
@@ -219,8 +229,12 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
           <div className="p-4 bg-slate-50 border border-slate-300 rounded mt-6 text-slate-700">
             <div className="font-bold text-xs mb-1">【設計照査の結論】</div>
-            <div>
-              本基礎構造は、常時・風時・地震時レベル1およびレベル2の全荷重ケースにおいて、杭基礎全体の安定性（支持力・変位）、杭体の断面応力度、および杭頭結合部の押抜きせん断応力度がすべて道路橋示方書の許容限界値を満足していることを確認した。
+            <div className={allCasesPass ? 'text-emerald-800' : 'text-red-700'}>
+              {results.length === 0
+                ? '計算結果がありません。計算実行後に出力してください。'
+                : allCasesPass
+                  ? '全荷重ケースで、このアプリの自動照査項目（支持力・変位・杭体断面・杭頭結合部）は合格です。正式な設計・施工判断には、適用基準の詳細照査と有資格者による確認が必要です。'
+                  : '不合格の荷重ケースがあります。計算書を正式な設計結論として出力・利用せず、入力条件と不合格項目を見直してください。'}
             </div>
           </div>
         </div>

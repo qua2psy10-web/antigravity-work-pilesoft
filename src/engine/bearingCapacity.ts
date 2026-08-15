@@ -2,6 +2,13 @@ import { SoilLayer } from '../types/soil';
 import { PileSpecification, FootingDimension } from '../types/pile';
 import { BearingCapacityResult } from '../types/calculation';
 
+export type SeismicReductionLevel = 'none' | 'l1' | 'l2';
+
+export interface AllowableCapacity {
+  bearing: number;
+  pullout: number;
+}
+
 /**
  * 杭の軸方向押込み・引抜き支持力および軸方向バネ定数 Kv の算定
  * 道路橋示方書・同解説 IV 下部構造編 第5章 杭基礎 準拠
@@ -11,10 +18,21 @@ export function calculateBearingCapacity(
   spec: PileSpecification,
   layers: SoilLayer[],
   footing: FootingDimension,
-  isSeismic: boolean = false
+  seismicReduction: SeismicReductionLevel | boolean = 'none'
 ): BearingCapacityResult {
+  const reductionLevel: SeismicReductionLevel = seismicReduction === true
+    ? 'l1'
+    : seismicReduction === false
+      ? 'none'
+      : seismicReduction;
   const D = spec.diameter;
   const L = spec.length;
+  if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(L) || L <= 0) {
+    throw new Error('杭径と杭長は 0 より大きい有限値で入力してください');
+  }
+  if (layers.length === 0) {
+    throw new Error('地盤層を少なくとも 1 層入力してください');
+  }
   const Ap = Math.PI * (D / 2) ** 2; // 杭先端面積 (m²)
   const U = Math.PI * D;             // 杭周長 (m)
   
@@ -33,7 +51,7 @@ export function calculateBearingCapacity(
   }
 
   const tipN = tipLayer.nValue;
-  let qd = 0;
+  let qd: number;
 
   // 施工法・杭種に応じた先端極限支持力度 qd (道示IV)
   switch (spec.method) {
@@ -90,7 +108,8 @@ export function calculateBearingCapacity(
   }
 
   // 杭先端極限支持力 Qp
-  const qp = qd * Ap;
+  // 摩擦杭は先端支持力を押込み抵抗に算入しない。
+  const qp = spec.bearingType === 'friction' ? 0 : qd * Ap;
 
   // 2. 周面摩擦力 Qs の算定
   let qs = 0;
@@ -103,10 +122,14 @@ export function calculateBearingCapacity(
     if (li <= 0) continue;
 
     // 地震時液状化低減係数 De
-    const de = isSeismic ? (layer.deLevel1 ?? 1.0) : 1.0;
+    const de = reductionLevel === 'none'
+      ? 1.0
+      : reductionLevel === 'l2'
+        ? (layer.deLevel2 ?? 1.0)
+        : (layer.deLevel1 ?? 1.0);
 
     // 最大周面摩擦力度 fi (kN/m²)
-    let fi = 0;
+    let fi: number;
     if (layer.soilType === 'sand') {
       if (spec.method === 'cast_in_place') {
         fi = Math.min(150, 5 * layer.nValue);
@@ -135,17 +158,20 @@ export function calculateBearingCapacity(
   const ru = qp + qs;
 
   // 杭自重 Wp (kN)
-  let unitWeightPile = 24.5; // コンクリート kN/m³
-  if (spec.pileType === 'steel_pipe') unitWeightPile = 78.5;
-  const pileWeightWp = Ap * L * unitWeightPile;
+  const steelPileTypes = new Set(['steel_pipe', 'steel_soil_cement', 'h_beam', 'rotary_steel']);
+  const isSteelPile = steelPileTypes.has(spec.pileType);
+  const unitWeightPile = isSteelPile ? 78.5 : 24.5; // kN/m³
+  // 先端面積 Ap は支持力用、断面積 A は杭自重用。鋼管杭を中実円柱として扱わない。
+  const pileWeightArea = isSteelPile ? spec.crossSectionAreaA : Ap;
+  const pileWeightWp = pileWeightArea * L * unitWeightPile;
 
-  // 許容押込み力 Ra (常時 n=3, 地震時 n=2)
-  const raNormal = (qp + qs) / 3.0;
-  const raSeismic = (qp + qs) / 2.0;
+  // 許容押込み力 Ra。H24道示IVでは支持杭=3/2、摩擦杭=4/3（常時/暴風・L1）。
+  const raNormal = ru / (spec.bearingType === 'friction' ? 4.0 : 3.0);
+  const raSeismic = ru / (spec.bearingType === 'friction' ? 3.0 : 2.0);
 
-  // 許容引抜き力 Rpa (常時: (1/3)*Wp + (1/6)*Qs, 地震時: Wp + (1/3)*Qs)
-  const rpaNormal = (1.0 / 3.0) * pileWeightWp + (1.0 / 6.0) * qs;
-  const rpaSeismic = pileWeightWp + (1.0 / 3.0) * qs;
+  // H24道示IV 12.4.2: Pa = Pu / n + W。W は安全率で除さない。
+  const rpaNormal = qs / 6.0 + pileWeightWp;
+  const rpaSeismic = qs / 3.0 + pileWeightWp;
 
   // 3. 軸方向地盤反力係数 Kv (kN/m)
   // Kv = a * (Ap * Ep / L) (道示IV 5.4.3)
@@ -173,5 +199,27 @@ export function calculateBearingCapacity(
     rpaSeismic: parseFloat(rpaSeismic.toFixed(1)),
     kv: parseFloat(kv.toFixed(1)),
     pileWeightWp: parseFloat(pileWeightWp.toFixed(1)),
+  };
+}
+
+/**
+ * 荷重ケースに設定した安全率による許容抵抗力。
+ * 引抜きは H24道示IV 12.4.2 に従い、周面摩擦のみを安全率で除して杭自重を加算する。
+ */
+export function calculateAllowableCapacity(
+  capacity: BearingCapacityResult,
+  bearingSafetyFactor: number,
+  pulloutSafetyFactor: number
+): AllowableCapacity {
+  if (!Number.isFinite(bearingSafetyFactor) || bearingSafetyFactor <= 0) {
+    throw new Error('支持力安全率は 0 より大きい有限値で入力してください');
+  }
+  if (!Number.isFinite(pulloutSafetyFactor) || pulloutSafetyFactor <= 0) {
+    throw new Error('引抜き安全率は 0 より大きい有限値で入力してください');
+  }
+
+  return {
+    bearing: parseFloat((capacity.ru / bearingSafetyFactor).toFixed(1)),
+    pullout: parseFloat((capacity.qs / pulloutSafetyFactor + capacity.pileWeightWp).toFixed(1)),
   };
 }

@@ -77,7 +77,7 @@ export const SoilView: React.FC<SoilViewProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
             地盤基本条件 & 耐震設計パラメータ
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">地下水位 (GL-m)</label>
               <input
@@ -92,7 +92,7 @@ export const SoilView: React.FC<SoilViewProps> = ({
               <label className="block text-xs font-bold text-slate-600 mb-1">地盤種別</label>
               <select
                 value={ground.groundType}
-                onChange={(e) => onChangeGround({ ...ground, groundType: e.target.value as any })}
+                onChange={(e) => onChangeGround({ ...ground, groundType: e.target.value as GroundCondition['groundType'] })}
                 className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 focus:outline-none focus:border-blue-500"
               >
                 <option value="I">I種地盤 (良質・岩盤)</option>
@@ -117,6 +117,16 @@ export const SoilView: React.FC<SoilViewProps> = ({
                 step="0.1"
                 value={ground.seismicIntensityL2Type1}
                 onChange={(e) => onChangeGround({ ...ground, seismicIntensityL2Type1: parseFloat(e.target.value) || 0.8 })}
+                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 focus:outline-none focus:border-blue-500 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">L2 TypeII 震度 khgL</label>
+              <input
+                type="number"
+                step="0.1"
+                value={ground.seismicIntensityL2Type2}
+                onChange={(e) => onChangeGround({ ...ground, seismicIntensityL2Type2: parseFloat(e.target.value) || 1.6 })}
                 className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 focus:outline-none focus:border-blue-500 font-mono"
               />
             </div>
