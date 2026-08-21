@@ -10,6 +10,7 @@ const stateLabel = {
 };
 
 export const LoadDisplacementPanel: React.FC<{ curve: LoadDisplacementCurveResult }> = ({ curve }) => {
+  const isIncremental = curve.model === 'incremental_winkler';
   const chart = useMemo(() => {
     const width = 760;
     const height = 300;
@@ -35,7 +36,11 @@ export const LoadDisplacementPanel: React.FC<{ curve: LoadDisplacementCurveResul
           <h3 className="flex items-center gap-2 text-base font-black text-slate-800">
             <Activity className="h-4 w-4 text-violet-600" /> L2 荷重-変位曲線・降伏判定
           </h3>
-          <p className="mt-1 text-xs text-slate-500">M-φ割線剛性から算定した水平荷重H-底版水平変位δ曲線</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {isIncremental
+              ? '深度方向梁要素・非線形地盤ばねを逐次更新した水平荷重H–底版水平変位δ曲線'
+              : 'M-φ割線剛性から算定した水平荷重H–底版水平変位δ曲線'}
+          </p>
         </div>
         <div className={`flex items-center gap-2 rounded border px-3 py-2 text-xs font-black ${pass ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-red-300 bg-red-50 text-red-800'}`}>
           {pass ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
@@ -78,6 +83,31 @@ export const LoadDisplacementPanel: React.FC<{ curve: LoadDisplacementCurveResul
           </div>
         </div>
       </div>
+
+      {isIncremental ? (
+        <div className="overflow-x-auto rounded border border-slate-200">
+          <table className="w-full min-w-[860px] border-collapse text-center text-xs">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr><th className="p-2">λ</th><th>H (kN)</th><th>δ (mm)</th><th>回転角 (rad)</th><th>最大M (kN·m)</th><th>発生深度 (m)</th><th>最大p/pHU</th><th>反復</th><th>状態</th></tr>
+            </thead>
+            <tbody>
+              {curve.points.map((point) => (
+                <tr key={point.loadFactor} className="border-t border-slate-200 font-mono">
+                  <td className="p-2">{point.loadFactor.toFixed(2)}</td>
+                  <td>{point.horizontalLoad.toFixed(1)}</td>
+                  <td>{point.displacement.toFixed(3)}</td>
+                  <td>{point.rotationAngle?.toExponential(3)}</td>
+                  <td>{point.maxMoment?.toFixed(1)}</td>
+                  <td>{point.maxMomentDepth?.toFixed(2)}</td>
+                  <td>{point.soilYieldRatio?.toFixed(3)}</td>
+                  <td>{point.iterations}{point.converged ? '' : '※'}</td>
+                  <td className="font-sans font-bold">{stateLabel[point.state]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <p className="border-l-4 border-amber-400 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{curve.notes.join('。')}。</p>
     </section>

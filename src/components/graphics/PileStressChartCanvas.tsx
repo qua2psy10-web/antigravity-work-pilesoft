@@ -13,8 +13,9 @@ export const PileStressChartCanvas: React.FC<PileStressChartCanvasProps> = ({
   width = 620,
   height = 580,
 }) => {
-  const [activeMetric, setActiveMetric] = useState<'moment' | 'shear' | 'deflection' | 'reaction'>('moment');
+  const [activeMetric, setActiveMetric] = useState<'moment' | 'shear' | 'deflection' | 'reaction' | 'curvature'>('moment');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isIncremental = profile.some((point) => point.sectionState !== undefined);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -64,6 +65,12 @@ export const PileStressChartCanvas: React.FC<PileStressChartCanvasProps> = ({
       label = '地盤反力度 p(z)';
       lineColor = '#16a34a'; // emerald-600
       fillColor = 'rgba(22, 163, 74, 0.15)';
+    } else if (activeMetric === 'curvature') {
+      getValue = (pt) => pt.curvaturePhi ?? 0;
+      unit = '1/m';
+      label = '曲率 φ(z)';
+      lineColor = '#7c3aed';
+      fillColor = 'rgba(124, 58, 237, 0.15)';
     }
 
     const values = profile.map(getValue);
@@ -167,7 +174,7 @@ export const PileStressChartCanvas: React.FC<PileStressChartCanvasProps> = ({
       <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
         <span className="text-xs font-bold tracking-wider text-slate-700 uppercase flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-          杭体 深度別断面力ダイアグラム (Chang解)
+          杭体 深度別断面力ダイアグラム ({isIncremental ? '増分解析' : 'Chang解'})
         </span>
         <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200 gap-1">
           <button
@@ -202,6 +209,16 @@ export const PileStressChartCanvas: React.FC<PileStressChartCanvasProps> = ({
           >
             p図 (地盤反力)
           </button>
+          {isIncremental ? (
+            <button
+              onClick={() => setActiveMetric('curvature')}
+              className={`px-2.5 py-1 text-xs font-bold rounded transition-colors ${
+                activeMetric === 'curvature' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              φ図 (曲率)
+            </button>
+          ) : null}
         </div>
       </div>
       <canvas

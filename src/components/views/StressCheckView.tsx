@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
 import { MomentCurvaturePanel } from './MomentCurvaturePanel';
 import { LoadDisplacementPanel } from './LoadDisplacementPanel';
 import { FootingCheckPanel } from './FootingCheckPanel';
+import { IncrementalDepthPanel } from './IncrementalDepthPanel';
 
 interface StressCheckViewProps {
   results: CalculationResult[];
@@ -52,6 +53,10 @@ export const StressCheckView: React.FC<StressCheckViewProps> = ({
 
       {currentResult.loadDisplacementCurve ? (
         <LoadDisplacementPanel curve={currentResult.loadDisplacementCurve} />
+      ) : null}
+
+      {currentResult.loadDisplacementCurve?.model === 'incremental_winkler' ? (
+        <IncrementalDepthPanel profiles={currentResult.pileDepthProfiles} />
       ) : null}
 
       <FootingCheckPanel check={currentResult.footingCheck} />

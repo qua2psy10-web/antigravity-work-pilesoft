@@ -20,6 +20,7 @@ const fmt = (value: number, digits = 3) =>
   });
 
 export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ checks }) => {
+  const isIncremental = checks.some((check) => check.notes.some((note) => note.includes('20梁要素')));
   const [selectedPileId, setSelectedPileId] = useState(checks[0]?.pileNodeId ?? '');
   const selected = checks.find((check) => check.pileNodeId === selectedPileId) ?? checks[0];
 
@@ -56,7 +57,9 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
             杭体 非線形M-φ解析（L2）
           </h3>
           <p className="mt-1 text-[11px] text-slate-500">
-            死荷重時軸力で骨格曲線を作成し、応答点の割線EIで杭単体Chang解を反復更新
+            {isIncremental
+              ? '各増分の杭軸力で骨格曲線を更新し、深度区間ごとの割線EIを反復計算'
+              : '死荷重時軸力で骨格曲線を作成し、応答点の割線EIで杭単体Chang解を反復更新'}
           </p>
         </div>
         <div className="flex max-w-full gap-1 overflow-x-auto">
@@ -113,7 +116,7 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
           </div>
 
           <dl className="grid grid-cols-2 border border-slate-200 text-xs">
-            <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">死荷重時軸力</dt><dd className="border-b border-slate-200 p-2 font-mono">{fmt(selected.axialForceForCurve, 1)} kN</dd>
+            <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">{isIncremental ? '解析時軸力' : '死荷重時軸力'}</dt><dd className="border-b border-slate-200 p-2 font-mono">{fmt(selected.axialForceForCurve, 1)} kN</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">応答 M</dt><dd className="border-b border-slate-200 p-2 font-mono">{fmt(selected.demandMoment, 1)} kN·m</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">応答 φ</dt><dd className="border-b border-slate-200 p-2 font-mono">{selected.demandCurvature.toExponential(4)} 1/m</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">曲率塑性率</dt><dd className="border-b border-slate-200 p-2 font-mono">μφ = {fmt(selected.ductilityRatio, 3)}</dd>
@@ -137,7 +140,9 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
       </div>
 
       <p className="border-l-4 border-amber-400 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
-        本結果は杭1本ごとのM-φ割線剛性反復です。地盤ばねの塑性化を含む杭基礎全体系の荷重増分解析、軸力変動、底版非線形は別途確認が必要です。
+        {isIncremental
+          ? '場所打ちRC杭は剛体底版と杭―地盤系を荷重増分ごとに釣合い計算しています。地盤反力上限pHUは簡易p-yモデルのため、正式設計では適用基準の式・上限値と照合してください。底版は別途線形照査です。'
+          : '本結果は杭1本ごとのM-φ割線剛性反復です。地盤ばねの塑性化を含む杭基礎全体系の荷重増分解析、軸力変動、底版非線形は別途確認が必要です。'}
       </p>
     </section>
   );

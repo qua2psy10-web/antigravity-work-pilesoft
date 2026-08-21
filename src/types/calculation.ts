@@ -37,6 +37,11 @@ export interface PileDepthStressPoint {
   momentM: number;      // 曲げモーメント M (kN·m)
   shearForceS: number;  // せん断力 S (kN)
   soilReactionP: number;// 地盤反力度 p (kN/m)
+  curvaturePhi?: number; // 曲率 φ (1/m)
+  sectionState?: MomentCurvatureState; // 杭体状態
+  effectiveStiffnessRatio?: number; // 区間割線EI / 初期EI
+  soilReactionLimit?: number; // 地盤反力上限 pHU (kN/m)
+  soilYieldRatio?: number; // |p| / pHU
 }
 
 export interface BearingCapacityResult {
@@ -141,6 +146,13 @@ export interface LoadDisplacementPoint {
   displacement: number; // mm
   equivalentStiffnessRatio: number;
   state: MomentCurvatureState;
+  rotationAngle?: number; // 底版回転角 (rad)
+  maxMoment?: number; // 全杭中の最大曲げモーメント (kN·m)
+  maxMomentDepth?: number; // 最大曲げモーメント深度 (m)
+  governingPileNodeId?: string;
+  soilYieldRatio?: number; // 最大地盤反力比
+  iterations?: number;
+  converged?: boolean;
 }
 
 export interface YieldCheckResult {
@@ -157,7 +169,7 @@ export interface YieldCheckResult {
 }
 
 export interface LoadDisplacementCurveResult {
-  model: 'equivalent_secant';
+  model: 'equivalent_secant' | 'incremental_winkler';
   points: LoadDisplacementPoint[];
   designDisplacement: number;
   yieldCheck: YieldCheckResult;

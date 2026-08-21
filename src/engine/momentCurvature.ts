@@ -8,7 +8,7 @@ import {
 import { FootingDimension, PileSpecification } from '../types/pile';
 import { calculatePileDepthProfile } from './pileStress';
 
-interface MomentCurvatureEnvelope {
+export interface MomentCurvatureEnvelope {
   modelType: 'trilinear' | 'bilinear';
   initialEI: number;
   points: MomentCurvaturePoint[];
@@ -149,7 +149,7 @@ export function buildMomentCurvatureEnvelope(
   return isRcFamily ? buildRcEnvelope(spec, axialForce) : buildSteelEnvelope(spec, axialForce);
 }
 
-function evaluateDemand(
+export function evaluateMomentCurvatureDemand(
   envelope: MomentCurvatureEnvelope,
   demandMoment: number,
 ): Pick<MomentCurvatureCheckResult, 'demandCurvature' | 'ductilityRatio' | 'effectiveFlexuralRigidity' | 'effectiveStiffnessRatio' | 'state' | 'isWithinUltimate'> {
@@ -215,7 +215,7 @@ export function analyzeNonlinearPileSection(
     footing,
     60,
   );
-  let demand = evaluateDemand(envelope, latestProfile.maxMoment);
+  let demand = evaluateMomentCurvatureDemand(envelope, latestProfile.maxMoment);
   let stiffnessRatio = clamp(demand.effectiveStiffnessRatio, 0.05, 1);
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
@@ -224,7 +224,7 @@ export function analyzeNonlinearPileSection(
     const effectiveBeta = Math.pow((kh * spec.diameter) / (4 * effectiveEI), 0.25);
     const effectiveSpec = { ...spec, modulusE: spec.modulusE * stiffnessRatio };
     latestProfile = calculatePileDepthProfile(effectiveSpec, reaction, effectiveBeta, kh, footing, 60);
-    demand = evaluateDemand(envelope, latestProfile.maxMoment);
+    demand = evaluateMomentCurvatureDemand(envelope, latestProfile.maxMoment);
     const targetRatio = clamp(demand.effectiveStiffnessRatio, 0.05, 1);
 
     if (Math.abs(targetRatio - stiffnessRatio) < 0.002) {
@@ -239,7 +239,7 @@ export function analyzeNonlinearPileSection(
     (kh * spec.diameter) / (4 * envelope.initialEI * clamp(stiffnessRatio, 0.05, 1)),
     0.25,
   );
-  const finalDemand = evaluateDemand(envelope, latestProfile.maxMoment);
+  const finalDemand = evaluateMomentCurvatureDemand(envelope, latestProfile.maxMoment);
   const check: MomentCurvatureCheckResult = {
     pileNodeId: reaction.pileNodeId,
     pileSpecId: spec.id,

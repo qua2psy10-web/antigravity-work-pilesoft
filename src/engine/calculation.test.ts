@@ -107,6 +107,31 @@ describe('杭基礎計算の安全側ガード', () => {
     }
   });
 
+  it('kiso-Kui_1の場所打ち杭M-φ基準値を概ね再現する', () => {
+    const project = structuredClone(defaultProject);
+    const spec = project.pileSpecs['spec-rc-1200'];
+    spec.modulusE = 2.75e7;
+    spec.rebarDiameter = 25;
+    spec.rebarCount = 24;
+    spec.rebarCover = 150;
+    const envelope = buildMomentCurvatureEnvelope(spec, 1626.7);
+    const cracking = envelope.points.find((point) => point.label === 'C')!;
+    const yielding = envelope.points.find((point) => point.label === 'Y')!;
+    const ultimate = envelope.points.find((point) => point.label === 'U')!;
+
+    // kiso-Kui_1 p.142: Mc=602.5, My=1837.9, Mu=2634.4 kN·m
+    // φc=0.0002159, φy=0.0027591, φu=0.0266303 1/m
+    expect(cracking.moment / 602.5).toBeGreaterThan(0.9);
+    expect(cracking.moment / 602.5).toBeLessThan(1.1);
+    expect(yielding.moment / 1837.9).toBeGreaterThan(0.9);
+    expect(yielding.moment / 1837.9).toBeLessThan(1.1);
+    expect(ultimate.moment / 2634.4).toBeGreaterThan(0.9);
+    expect(ultimate.moment / 2634.4).toBeLessThan(1.1);
+    expect(cracking.curvature / 0.0002159).toBeGreaterThan(0.85);
+    expect(yielding.curvature / 0.0027591).toBeGreaterThan(0.85);
+    expect(ultimate.curvature / 0.0266303).toBeGreaterThan(0.85);
+  });
+
   it('鋼管杭のM-φ骨格は腐食・軸力を反映したMy-Mpバイリニアになる', () => {
     const project = structuredClone(steelPileSampleProject);
     const spec = project.pileSpecs['spec-steel-800'];
@@ -119,7 +144,7 @@ describe('杭基礎計算の安全側ガード', () => {
     expect(withAxial.points[2].moment).toBeGreaterThan(withAxial.points[1].moment);
   });
 
-  it('L2結果に杭ごとのM-φ割線剛性反復結果を格納する', () => {
+  it('場所打ちRC杭のL2結果に深度方向増分解析を格納する', () => {
     const project = structuredClone(defaultProject);
     const results = runFullDesignCalculation(
       project.ground,
@@ -134,9 +159,19 @@ describe('杭基礎計算の安全側ガード', () => {
     expect(normal.momentCurvatureChecks).toEqual([]);
     expect(l2.momentCurvatureChecks).toHaveLength(project.pileNodes.length);
     expect(l2.momentCurvatureChecks.every((check) => check.converged)).toBe(true);
-    expect(l2.momentCurvatureChecks[0].axialForceForCurve).toBe(normal.pileReactions[0].axialForceP);
+    expect(l2.loadDisplacementCurve?.model).toBe('incremental_winkler');
+    expect(l2.momentCurvatureChecks[0].axialForceForCurve).toBe(l2.pileReactions[0].axialForceP);
+    expect(l2.momentCurvatureChecks[0].axialForceForCurve).not.toBe(normal.pileReactions[0].axialForceP);
     expect(l2.momentCurvatureChecks[0].effectiveStiffnessRatio).toBeLessThanOrEqual(1);
     expect(l2.loadDisplacementCurve?.points).toHaveLength(16);
+    expect(l2.pileDepthProfiles.p1).toHaveLength(21);
+    expect(l2.pileDepthProfiles.p1.some((point) => point.curvaturePhi !== undefined)).toBe(true);
+    expect(l2.pileDepthProfiles.p1.some((point) => point.soilReactionLimit !== undefined)).toBe(true);
+    if (l2.loadDisplacementCurve!.yieldCheck.yieldLoadFactor > 1.5) {
+      expect(l2.loadDisplacementCurve!.yieldCheck.yieldDisplacement).toBeGreaterThan(
+        l2.loadDisplacementCurve!.points.at(-1)!.displacement,
+      );
+    }
     expect(l2.loadDisplacementCurve!.designDisplacement).toBeGreaterThanOrEqual(
       Math.abs(l2.footingDisplacement.deltaX),
     );

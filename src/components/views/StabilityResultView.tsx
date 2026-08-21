@@ -63,7 +63,7 @@ export const StabilityResultView: React.FC<StabilityResultViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
         {/* 水平変位 */}
         <div className="bg-white border border-slate-200 p-4 rounded-lg shadow-sm">
-          <div className="text-slate-600 font-bold mb-1">{currentResult.loadDisplacementCurve ? 'L2等価割線変位 δ' : '底版水平変位 δx'}</div>
+          <div className="text-slate-600 font-bold mb-1">{currentResult.loadDisplacementCurve?.model === 'incremental_winkler' ? 'L2増分解析変位 δ' : currentResult.loadDisplacementCurve ? 'L2等価割線変位 δ' : '底版水平変位 δx'}</div>
           <div className="text-2xl font-bold font-mono text-blue-700">
             {horizontalDisplacement.toFixed(2)}{' '}
             <span className="text-xs font-normal text-slate-500">mm</span>
