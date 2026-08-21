@@ -3,6 +3,7 @@ import { PileSpecification, PileNode, FootingDimension } from '../types/pile';
 import { LoadCase } from '../types/load';
 import {
   CalculationResult,
+  MomentCurvatureCheckResult,
   PileCapacityCheckResult,
   PileDepthStressPoint,
   PileHeadJointCheckResult,
@@ -19,6 +20,9 @@ import { solvePileGroupDisplacement } from './matrixSolver';
 import { calculatePileDepthProfile } from './pileStress';
 import { checkPileSectionStress } from './sectionCheck';
 import { checkPileHeadJoint } from './pileHeadCheck';
+import { analyzeNonlinearPileSection } from './momentCurvature';
+import { buildLoadDisplacementCurve } from './loadDisplacement';
+import { checkFootingSlab } from './footingCheck';
 
 /**
  * 杭基礎設計 全体一括計算エンジン
@@ -34,6 +38,7 @@ export function runFullDesignCalculation(
     throw new Error('杭仕様を少なくとも 1 件入力してください');
   }
   const pileNodeById = new Map(pileNodes.map((node) => [node.id, node]));
+  const loadCaseById = new Map(loadCases.map((loadCase) => [loadCase.id, loadCase]));
   for (const node of pileNodes) {
     if (!node.isOmitted && !pileSpecs[node.pileSpecId]) {
       throw new Error(`杭節点 ${node.id} に設定された杭仕様 ${node.pileSpecId} が見つかりません`);
@@ -208,8 +213,9 @@ export function runFullDesignCalculation(
     const isDispOk = maxDisplacement <= loadCase.allowableDisplacement;
     const isSectionAllOk = sectionChecks.every((c) => c.isPass);
     const isJointAllOk = jointChecks.every((c) => c.isPass);
+    const footingCheck = checkFootingSlab(loadCase.id, footing, solveRes.reactions);
 
-    const isStable = isBearingOk && isPulloutOk && isDispOk && isSectionAllOk && isJointAllOk;
+    const isStable = isBearingOk && isPulloutOk && isDispOk && isSectionAllOk && isJointAllOk && footingCheck.isPass;
 
     results.push({
       loadCaseId: loadCase.id,
@@ -222,6 +228,8 @@ export function runFullDesignCalculation(
       bearingCapacity: bearingBySpec[defaultSpecId],
       sectionChecks,
       jointChecks,
+      momentCurvatureChecks: [],
+      footingCheck,
       pileCapacityChecks,
       allowableBearingKn: governingCapacityCheck.allowableBearing,
       allowablePulloutKn: governingCapacityCheck.allowablePullout,
@@ -231,6 +239,73 @@ export function runFullDesignCalculation(
       maxAxialTensionKn: maxTension,
       isStable,
     });
+  }
+
+  // L2荷重ケースは、死荷重時軸力で作成したM-φ骨格の割線EIを用いて
+  // 杭1本ごとのChang解を反復更新する。全体系の増分変位法とは区別する。
+  const normalResult = results.find((result) => result.loadCaseType === 'normal');
+  const normalAxialByPile = new Map(
+    normalResult?.pileReactions.map((reaction) => [reaction.pileNodeId, reaction.axialForceP]) ?? [],
+  );
+
+  for (const result of results) {
+    if (result.loadCaseType !== 'seismic_l2_t1' && result.loadCaseType !== 'seismic_l2_t2') continue;
+    const loadCase = loadCaseById.get(result.loadCaseId);
+    if (!loadCase) continue;
+
+    const nonlinearChecks: MomentCurvatureCheckResult[] = [];
+    const updatedSectionChecks: SectionStressCheckResult[] = [];
+    const updatedProfiles: Record<string, PileDepthStressPoint[]> = { ...result.pileDepthProfiles };
+
+    for (const reaction of result.pileReactions) {
+      const node = pileNodeById.get(reaction.pileNodeId);
+      if (!node) continue;
+      const spec = pileSpecs[node.pileSpecId];
+      const hasNormalAxialForce = normalAxialByPile.has(node.id);
+      const axialForceForCurve = normalAxialByPile.get(node.id) ?? reaction.axialForceP;
+      const nonlinear = analyzeNonlinearPileSection(
+        spec,
+        reaction,
+        result.springMatrix.kh,
+        footing,
+        axialForceForCurve,
+      );
+      if (!hasNormalAxialForce) {
+        nonlinear.check.notes.push('常時荷重ケースがないため、当該L2ケースの軸力でM-φ骨格を作成');
+      }
+      nonlinearChecks.push(nonlinear.check);
+      updatedProfiles[node.id] = nonlinear.profile;
+      updatedSectionChecks.push(checkPileSectionStress(
+        spec,
+        loadCase,
+        node.id,
+        nonlinear.maxMoment,
+        nonlinear.maxMomentDepth,
+        reaction.axialForceP,
+        nonlinear.maxShear,
+      ));
+    }
+
+    result.momentCurvatureChecks = nonlinearChecks;
+    result.loadDisplacementCurve = buildLoadDisplacementCurve(
+      nonlinearChecks,
+      loadCase.horizontalForceH,
+      loadCase.momentM,
+      result.maxDisplacementMm,
+    );
+    result.maxDisplacementMm = result.loadDisplacementCurve.designDisplacement;
+    result.pileDepthProfiles = updatedProfiles;
+    result.sectionChecks = updatedSectionChecks;
+    const isCapacityOk = result.pileCapacityChecks.every((check) => check.isBearingOk && check.isPulloutOk);
+    const isDisplacementOk = result.maxDisplacementMm <= result.allowableDisplacementMm;
+    const isSectionOk = updatedSectionChecks.every((check) => check.isPass);
+    const isJointOk = result.jointChecks.every((check) => check.isPass);
+    const isMomentCurvatureOk = nonlinearChecks.every(
+      (check) => check.isWithinUltimate && check.converged,
+    );
+    const isYieldUltimateOk = result.loadDisplacementCurve.yieldCheck.isWithinUltimateAtDesignLoad;
+    result.isStable = isCapacityOk && isDisplacementOk && isSectionOk && isJointOk &&
+      isMomentCurvatureOk && isYieldUltimateOk && result.footingCheck.isPass;
   }
 
   return results;

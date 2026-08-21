@@ -11,6 +11,25 @@ interface ArrangementViewProps {
   pileSpecs: { [id: string]: PileSpecification };
 }
 
+const FootingNumberField: React.FC<{
+  label: string;
+  value: number;
+  step?: number;
+  onChange: (value: number) => void;
+}> = ({ label, value, step = 1, onChange }) => (
+  <div>
+    <label className="block text-xs font-bold text-slate-600 mb-1">{label}</label>
+    <input
+      type="number"
+      min="0"
+      step={step}
+      value={value}
+      onChange={(event) => onChange(Number(event.target.value))}
+      className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
+    />
+  </div>
+);
+
 export const ArrangementView: React.FC<ArrangementViewProps> = ({
   footing,
   onChangeFooting,
@@ -114,6 +133,32 @@ export const ArrangementView: React.FC<ArrangementViewProps> = ({
                 onChange={(e) => onChangeFooting({ ...footing, depthGL: parseFloat(e.target.value) || 1.5 })}
                 className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
               />
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-slate-200 pt-4">
+            <h4 className="mb-3 text-sm font-black text-slate-800">底版詳細照査条件</h4>
+            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+              <FootingNumberField label="柱幅 X (m)" value={footing.columnLengthX ?? 2} step={0.1} onChange={(value) => onChangeFooting({ ...footing, columnLengthX: value })} />
+              <FootingNumberField label="柱幅 Y (m)" value={footing.columnLengthY ?? 2} step={0.1} onChange={(value) => onChangeFooting({ ...footing, columnLengthY: value })} />
+              <FootingNumberField label="鉄筋降伏強度 (N/mm²)" value={footing.rebarYieldStrength ?? 295} onChange={(value) => onChangeFooting({ ...footing, rebarYieldStrength: value })} />
+              <FootingNumberField label="上側かぶり (mm)" value={footing.topRebarCover ?? 110} onChange={(value) => onChangeFooting({ ...footing, topRebarCover: value })} />
+              <FootingNumberField label="下側かぶり (mm)" value={footing.bottomRebarCover ?? 150} onChange={(value) => onChangeFooting({ ...footing, bottomRebarCover: value })} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <FootingNumberField label="X上側 鉄筋径 (mm)" value={footing.topRebarDiameterX ?? 22} onChange={(value) => onChangeFooting({ ...footing, topRebarDiameterX: value })} />
+              <FootingNumberField label="X上側 ピッチ (mm)" value={footing.topRebarSpacingX ?? 125} onChange={(value) => onChangeFooting({ ...footing, topRebarSpacingX: value })} />
+              <FootingNumberField label="X下側 鉄筋径 (mm)" value={footing.bottomRebarDiameterX ?? 32} onChange={(value) => onChangeFooting({ ...footing, bottomRebarDiameterX: value })} />
+              <FootingNumberField label="X下側 ピッチ (mm)" value={footing.bottomRebarSpacingX ?? 125} onChange={(value) => onChangeFooting({ ...footing, bottomRebarSpacingX: value })} />
+              <FootingNumberField label="Y上側 鉄筋径 (mm)" value={footing.topRebarDiameterY ?? 32} onChange={(value) => onChangeFooting({ ...footing, topRebarDiameterY: value })} />
+              <FootingNumberField label="Y上側 ピッチ (mm)" value={footing.topRebarSpacingY ?? 125} onChange={(value) => onChangeFooting({ ...footing, topRebarSpacingY: value })} />
+              <FootingNumberField label="Y下側 鉄筋径 (mm)" value={footing.bottomRebarDiameterY ?? 25} onChange={(value) => onChangeFooting({ ...footing, bottomRebarDiameterY: value })} />
+              <FootingNumberField label="Y下側 ピッチ (mm)" value={footing.bottomRebarSpacingY ?? 125} onChange={(value) => onChangeFooting({ ...footing, bottomRebarSpacingY: value })} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              <FootingNumberField label="斜引張鉄筋径 (mm)" value={footing.shearRebarDiameter ?? 16} onChange={(value) => onChangeFooting({ ...footing, shearRebarDiameter: value })} />
+              <FootingNumberField label="斜引張鉄筋間隔 (mm)" value={footing.shearRebarSpacing ?? 250} onChange={(value) => onChangeFooting({ ...footing, shearRebarSpacing: value })} />
+              <FootingNumberField label="有効脚数 (/m)" value={footing.shearRebarLegs ?? 2} onChange={(value) => onChangeFooting({ ...footing, shearRebarLegs: value })} />
             </div>
           </div>
         </div>

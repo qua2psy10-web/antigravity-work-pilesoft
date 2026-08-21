@@ -50,6 +50,7 @@ export interface PileSpecification {
   allowableCompressiveStress?: number; // 許容圧縮応力度 (N/mm²)
   allowableTensileStress?: number;     // 許容引張鉄筋応力度 (N/mm²)
   allowableShearStress?: number;       // 許容せん断応力度 (N/mm²)
+  steelYieldStrength?: number;         // 鋼管の降伏強度 σy (N/mm², 例: SKK400=235, SKK490=315)
 }
 
 export interface PileNode {
@@ -71,4 +72,20 @@ export interface FootingDimension {
   embedmentDepth: number; // 根入れ深さ (m)
   concreteStrengthFck: number; // フーチングコンクリート強度 (N/mm²)
   unitWeightConcrete: number; // 単位体積重量 (kN/m³, 通常 24.5)
+  columnLengthX?: number; // 橋脚柱・躯体幅 X方向 (m)
+  columnLengthY?: number; // 橋脚柱・躯体幅 Y方向 (m)
+  rebarYieldStrength?: number; // 底版主鉄筋の降伏強度 (N/mm²)
+  topRebarDiameterX?: number; // X方向上側主鉄筋径 (mm)
+  topRebarSpacingX?: number; // X方向上側主鉄筋ピッチ (mm)
+  bottomRebarDiameterX?: number; // X方向下側主鉄筋径 (mm)
+  bottomRebarSpacingX?: number; // X方向下側主鉄筋ピッチ (mm)
+  topRebarDiameterY?: number; // Y方向上側主鉄筋径 (mm)
+  topRebarSpacingY?: number; // Y方向上側主鉄筋ピッチ (mm)
+  bottomRebarDiameterY?: number; // Y方向下側主鉄筋径 (mm)
+  bottomRebarSpacingY?: number; // Y方向下側主鉄筋ピッチ (mm)
+  topRebarCover?: number; // 上側主鉄筋かぶり (mm)
+  bottomRebarCover?: number; // 下側主鉄筋かぶり (mm)
+  shearRebarDiameter?: number; // 斜引張鉄筋径 (mm)
+  shearRebarSpacing?: number; // 斜引張鉄筋間隔 (mm)
+  shearRebarLegs?: number; // 単位幅内で有効な斜引張鉄筋の脚数
 }

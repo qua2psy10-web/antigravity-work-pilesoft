@@ -102,6 +102,108 @@ export interface PileCapacityCheckResult {
   isPulloutOk: boolean;
 }
 
+export type MomentCurvatureState =
+  | 'elastic'
+  | 'cracked'
+  | 'yielded'
+  | 'ultimate_exceeded';
+
+export interface MomentCurvaturePoint {
+  label: 'O' | 'C' | 'Y' | 'U' | 'P';
+  moment: number;       // 曲げモーメント M (kN·m)
+  curvature: number;    // 曲率 φ (1/m)
+  secantEI: number;     // 原点からの割線剛性 M/φ (kN·m²)
+}
+
+export interface MomentCurvatureCheckResult {
+  pileNodeId: string;
+  pileSpecId: string;
+  modelType: 'trilinear' | 'bilinear';
+  axialForceForCurve: number; // M-φ骨格算定に用いた死荷重時軸力 (kN)
+  points: MomentCurvaturePoint[];
+  demandMoment: number;       // 最大応答曲げモーメントの絶対値 (kN·m)
+  demandCurvature: number;    // M-φ骨格から逆算した応答曲率 (1/m)
+  ductilityRatio: number;     // φd / φy
+  effectiveFlexuralRigidity: number; // 応答点の割線EI (kN·m²)
+  effectiveStiffnessRatio: number;    // EIeff / EI0
+  effectiveBeta: number;      // 割線EIで更新した杭特性値 β (1/m)
+  state: MomentCurvatureState;
+  iterations: number;
+  converged: boolean;
+  isWithinUltimate: boolean;
+  notes: string[];
+}
+
+export interface LoadDisplacementPoint {
+  loadFactor: number;
+  horizontalLoad: number; // kN
+  overturningMoment: number; // kN·m
+  displacement: number; // mm
+  equivalentStiffnessRatio: number;
+  state: MomentCurvatureState;
+}
+
+export interface YieldCheckResult {
+  governingPileNodeId: string;
+  yieldMoment: number; // kN·m
+  designMoment: number; // kN·m
+  yieldLoadFactor: number;
+  yieldHorizontalLoad: number; // kN
+  yieldDisplacement: number; // mm
+  ultimateLoadFactor: number;
+  hasYieldedAtDesignLoad: boolean;
+  isWithinUltimateAtDesignLoad: boolean;
+  state: MomentCurvatureState;
+}
+
+export interface LoadDisplacementCurveResult {
+  model: 'equivalent_secant';
+  points: LoadDisplacementPoint[];
+  designDisplacement: number;
+  yieldCheck: YieldCheckResult;
+  notes: string[];
+}
+
+export interface FootingDirectionCheckResult {
+  direction: 'X' | 'Y';
+  effectiveWidth: number; // m
+  effectiveDepthBottom: number; // mm
+  effectiveDepthTop: number; // mm
+  positiveMoment: number; // kN·m/m, 下側引張
+  negativeMoment: number; // kN·m/m, 上側引張
+  bottomRebarArea: number; // mm²/m
+  topRebarArea: number; // mm²/m
+  requiredBottomRebarArea: number; // mm²/m
+  requiredTopRebarArea: number; // mm²/m
+  positiveMomentCapacity: number; // kN·m/m
+  negativeMomentCapacity: number; // kN·m/m
+  flexureUtilization: number;
+  designShear: number; // kN/m
+  concreteShearCapacity: number; // kN/m
+  shearRebarCapacity: number; // kN/m
+  shearCapacity: number; // kN/m
+  shearUtilization: number;
+  isFlexurePass: boolean;
+  isShearPass: boolean;
+}
+
+export interface FootingPunchingCheckResult {
+  criticalPerimeter: number; // m
+  effectiveDepth: number; // mm
+  designShear: number; // kN
+  capacity: number; // kN
+  utilization: number;
+  isPass: boolean;
+}
+
+export interface FootingCheckResult {
+  loadCaseId: string;
+  directions: FootingDirectionCheckResult[];
+  punching: FootingPunchingCheckResult;
+  isPass: boolean;
+  notes: string[];
+}
+
 export interface CalculationResult {
   loadCaseId: string;
   loadCaseName: string;
@@ -113,6 +215,9 @@ export interface CalculationResult {
   bearingCapacity: BearingCapacityResult;
   sectionChecks: SectionStressCheckResult[];
   jointChecks: PileHeadJointCheckResult[];
+  momentCurvatureChecks: MomentCurvatureCheckResult[];
+  loadDisplacementCurve?: LoadDisplacementCurveResult;
+  footingCheck: FootingCheckResult;
   pileCapacityChecks: PileCapacityCheckResult[];
   allowableBearingKn: number;
   allowablePulloutKn: number;

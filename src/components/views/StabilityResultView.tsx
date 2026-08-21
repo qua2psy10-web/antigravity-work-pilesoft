@@ -29,6 +29,8 @@ export const StabilityResultView: React.FC<StabilityResultViewProps> = ({
 
   const pileId = selectedPileId || currentResult.pileReactions[0]?.pileNodeId || 'p1';
   const currentProfile = currentResult.pileDepthProfiles[pileId] || [];
+  const horizontalDisplacement = currentResult.loadDisplacementCurve?.designDisplacement ??
+    Math.abs(currentResult.footingDisplacement.deltaX);
 
   return (
     <div className="p-4 space-y-6">
@@ -61,13 +63,14 @@ export const StabilityResultView: React.FC<StabilityResultViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
         {/* 水平変位 */}
         <div className="bg-white border border-slate-200 p-4 rounded-lg shadow-sm">
-          <div className="text-slate-600 font-bold mb-1">底版水平変位 δx</div>
+          <div className="text-slate-600 font-bold mb-1">{currentResult.loadDisplacementCurve ? 'L2等価割線変位 δ' : '底版水平変位 δx'}</div>
           <div className="text-2xl font-bold font-mono text-blue-700">
-            {currentResult.footingDisplacement.deltaX.toFixed(2)}{' '}
+            {horizontalDisplacement.toFixed(2)}{' '}
             <span className="text-xs font-normal text-slate-500">mm</span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
             許容値: &le; {currentResult.allowableDisplacementMm.toFixed(1)} mm
+            {currentResult.loadDisplacementCurve ? `（弾性値 ${Math.abs(currentResult.footingDisplacement.deltaX).toFixed(2)} mm）` : ''}
           </div>
         </div>
 
