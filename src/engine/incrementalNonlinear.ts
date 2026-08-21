@@ -16,6 +16,10 @@ import {
   evaluateMomentCurvatureDemand,
   type MomentCurvatureEnvelope,
 } from './momentCurvature';
+import {
+  getPileSoilInteractionDiameter,
+  resolvePileSectionAtDepth,
+} from './pileSection';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -26,7 +30,8 @@ const stateRank: Record<MomentCurvatureState, number> = {
   elastic: 0,
   cracked: 1,
   yielded: 2,
-  ultimate_exceeded: 3,
+  fully_plastic: 3,
+  ultimate_exceeded: 4,
 };
 
 interface PileBeamResponse {
@@ -37,6 +42,8 @@ interface PileBeamResponse {
   maxMomentDepth: number;
   maxShear: number;
   maxSoilYieldRatio: number;
+  governingMoment: number;
+  governingDepth: number;
   state: MomentCurvatureState;
   yieldRatio: number;
   ultimateRatio: number;
@@ -66,15 +73,24 @@ export interface IncrementalPileGroupResult {
   checks: MomentCurvatureCheckResult[];
 }
 
-export function canRunRcIncrementalAnalysis(
+const INCREMENTAL_PILE_TYPES = new Set([
+  'cast_in_place_rc',
+  'steel_pipe',
+  'steel_soil_cement',
+]);
+
+export function canRunPileGroupIncrementalAnalysis(
   pileNodes: PileNode[],
   pileSpecs: Record<string, PileSpecification>,
 ) {
   const active = pileNodes.filter((pile) => !pile.isOmitted);
   return active.length > 0 && active.every((pile) =>
-    pile.inclinationAngle === 0 && pileSpecs[pile.pileSpecId]?.pileType === 'cast_in_place_rc',
+    pile.inclinationAngle === 0 && INCREMENTAL_PILE_TYPES.has(pileSpecs[pile.pileSpecId]?.pileType),
   );
 }
+
+/** 既存呼出しとの互換用。 */
+export const canRunRcIncrementalAnalysis = canRunPileGroupIncrementalAnalysis;
 
 function solveLinearSystem(matrix: number[][], vector: number[]) {
   const size = vector.length;
@@ -220,15 +236,28 @@ function analyzePileBeam(
   referenceKh: number,
   elementCount = 20,
 ) : PileBeamResponse {
-  const envelope = buildMomentCurvatureEnvelope(spec, axialForce);
-  const initialEI = envelope.initialEI;
   const elementLength = spec.length / elementCount;
   const nodeCount = elementCount + 1;
-  let elementEis = Array(elementCount).fill(initialEI);
+  const soilDiameter = getPileSoilInteractionDiameter(spec);
+  const envelopeCache = new Map<string, MomentCurvatureEnvelope>();
+  const envelopeAtDepth = (depth: number) => {
+    const resolved = resolvePileSectionAtDepth(spec, depth);
+    const cacheKey = resolved.segment?.id ?? 'uniform';
+    const cached = envelopeCache.get(cacheKey);
+    if (cached) return cached;
+    const envelope = buildMomentCurvatureEnvelope(spec, axialForce, depth);
+    envelopeCache.set(cacheKey, envelope);
+    return envelope;
+  };
+  const elementEnvelopes = Array.from({ length: elementCount }, (_, element) =>
+    envelopeAtDepth((element + 0.5) * elementLength),
+  );
+  const initialEis = elementEnvelopes.map((envelope) => envelope.initialEI);
+  let elementEis = [...initialEis];
   let soilStiffnesses = Array.from({ length: nodeCount }, (_, node) => {
     const tributaryLength = node === 0 || node === nodeCount - 1 ? elementLength / 2 : elementLength;
     const depth = footing.depthGL + node * elementLength;
-    return soilProperties(ground, layers, depth, spec.diameter, referenceKh).linearPerLength * tributaryLength;
+    return soilProperties(ground, layers, depth, soilDiameter, referenceKh).linearPerLength * tributaryLength;
   });
   let displacements = Array(nodeCount * 2).fill(0);
   let converged = false;
@@ -246,15 +275,15 @@ function analyzePileBeam(
       const forces = multiply(stiffness, dofs.map((dof) => displacements[dof]));
       const moment = Math.max(Math.abs(forces[1]), Math.abs(forces[3]));
       return clamp(
-        evaluateMomentCurvatureDemand(envelope, moment).effectiveFlexuralRigidity,
-        initialEI * 0.01,
-        initialEI,
+        evaluateMomentCurvatureDemand(elementEnvelopes[element], moment).effectiveFlexuralRigidity,
+        initialEis[element] * 0.01,
+        initialEis[element],
       );
     });
     const targetSoil = soilStiffnesses.map((_, node) => {
       const tributaryLength = node === 0 || node === nodeCount - 1 ? elementLength / 2 : elementLength;
       const depth = footing.depthGL + node * elementLength;
-      const properties = soilProperties(ground, layers, depth, spec.diameter, referenceKh);
+      const properties = soilProperties(ground, layers, depth, soilDiameter, referenceKh);
       const displacement = Math.abs(displacements[2 * node]);
       const secantPerLength = displacement > 1e-9
         ? Math.min(properties.linearPerLength, properties.ultimatePerLength / displacement)
@@ -266,7 +295,7 @@ function analyzePileBeam(
       Math.abs(value - previous[index]) / Math.max(1e-6, Math.abs(value)),
     ));
     const stiffnessChange = Math.max(...targetEis.map((value, index) =>
-      Math.abs(value - elementEis[index]) / initialEI,
+      Math.abs(value - elementEis[index]) / initialEis[index],
     ));
     elementEis = elementEis.map((value, index) => 0.45 * value + 0.55 * targetEis[index]);
     soilStiffnesses = soilStiffnesses.map((value, index) => 0.45 * value + 0.55 * targetSoil[index]);
@@ -304,16 +333,47 @@ function analyzePileBeam(
   let maxShear = 0;
   let maxSoilYieldRatio = 0;
   let worstState: MomentCurvatureState = 'elastic';
+  let governingMoment = 0;
+  let governingDepth = 0;
+  let governingYieldRatio = 0;
+  let governingUltimateRatio = 0;
+  let governingEnvelope = elementEnvelopes[0];
+
+  elementEis.forEach((ei, element) => {
+    const stiffness = beamElementStiffness(ei, elementLength);
+    const dofs = [2 * element, 2 * element + 1, 2 * element + 2, 2 * element + 3];
+    const forces = multiply(stiffness, dofs.map((dof) => displacements[dof]));
+    const endMoments = [Math.abs(forces[1]), Math.abs(forces[3])];
+    const envelope = elementEnvelopes[element];
+    const yieldMoment = envelope.points.find((point) => point.label === 'Y')!.moment;
+    const limitMoment = envelope.points[envelope.points.length - 1].moment;
+    endMoments.forEach((moment, end) => {
+      const sectionDemand = evaluateMomentCurvatureDemand(envelope, moment);
+      const yieldRatio = moment / yieldMoment;
+      const limitRatio = moment / limitMoment;
+      if (stateRank[sectionDemand.state] > stateRank[worstState]) worstState = sectionDemand.state;
+      if (yieldRatio > governingYieldRatio) {
+        governingYieldRatio = yieldRatio;
+        governingMoment = moment;
+        governingDepth = (element + end) * elementLength;
+        governingEnvelope = envelope;
+      }
+      governingUltimateRatio = Math.max(governingUltimateRatio, limitRatio);
+    });
+  });
+
   const profile = Array.from({ length: nodeCount }, (_, node): PileDepthStressPoint => {
     const depthZ = node * elementLength;
     const groundDepth = footing.depthGL + depthZ;
     const tributaryLength = node === 0 || node === nodeCount - 1 ? elementLength / 2 : elementLength;
-    const properties = soilProperties(ground, layers, groundDepth, spec.diameter, referenceKh);
+    const properties = soilProperties(ground, layers, groundDepth, soilDiameter, referenceKh);
     const displacement = displacements[2 * node];
     const soilReaction = -soilStiffnesses[node] * displacement / tributaryLength;
     const moment = moments[node] / Math.max(1, momentCounts[node]);
     const shear = shears[node] / Math.max(1, shearCounts[node]);
-    const section = evaluateMomentCurvatureDemand(envelope, Math.abs(moment));
+    const resolvedSection = resolvePileSectionAtDepth(spec, depthZ);
+    const sectionEnvelope = envelopeAtDepth(depthZ);
+    const section = evaluateMomentCurvatureDemand(sectionEnvelope, Math.abs(moment));
     const soilYieldRatio = Math.abs(soilReaction) / properties.ultimatePerLength;
     if (Math.abs(moment) > Math.abs(maxMoment)) {
       maxMoment = moment;
@@ -332,13 +392,13 @@ function analyzePileBeam(
       soilReactionP: round(soilReaction, 1),
       curvaturePhi: section.demandCurvature,
       sectionState: section.state,
+      sectionSegmentId: resolvedSection.segment?.id,
+      sectionWallThickness: resolvedSection.spec.wallThickness,
       effectiveStiffnessRatio: section.effectiveStiffnessRatio,
       soilReactionLimit: round(properties.ultimatePerLength, 1),
       soilYieldRatio: round(soilYieldRatio, 3),
     };
   });
-  const yieldPoint = envelope.points.find((point) => point.label === 'Y')!;
-  const ultimatePoint = envelope.points[envelope.points.length - 1];
 
   return {
     headShear: reactions[0],
@@ -348,12 +408,14 @@ function analyzePileBeam(
     maxMomentDepth,
     maxShear,
     maxSoilYieldRatio,
+    governingMoment,
+    governingDepth,
     state: worstState,
-    yieldRatio: Math.abs(maxMoment) / yieldPoint.moment,
-    ultimateRatio: Math.abs(maxMoment) / ultimatePoint.moment,
+    yieldRatio: governingYieldRatio,
+    ultimateRatio: governingUltimateRatio,
     iterations,
     converged,
-    envelope,
+    envelope: governingEnvelope,
   };
 }
 
@@ -383,7 +445,7 @@ function displacementAtFactor(states: IncrementState[], factor: number) {
   return before.point.displacement + ratio * (after.point.displacement - before.point.displacement);
 }
 
-export function runRcPileGroupIncrementalAnalysis(
+export function runPileGroupIncrementalAnalysis(
   ground: GroundCondition,
   effectiveLayers: SoilLayer[],
   pileSpecs: Record<string, PileSpecification>,
@@ -395,8 +457,8 @@ export function runRcPileGroupIncrementalAnalysis(
   increments = 15,
 ): IncrementalPileGroupResult {
   const activePiles = pileNodes.filter((pile) => !pile.isOmitted);
-  if (!canRunRcIncrementalAnalysis(activePiles, pileSpecs)) {
-    throw new Error('増分Winkler解析は現在、鉛直の場所打ちRC杭だけに対応しています');
+  if (!canRunPileGroupIncrementalAnalysis(activePiles, pileSpecs)) {
+    throw new Error('増分Winkler解析は鉛直の場所打ちRC杭・鋼管杭・鋼管ソイルセメント杭に対応しています');
   }
 
   const footingWeight = footing.lengthX * footing.lengthY * footing.thickness * footing.unitWeightConcrete;
@@ -547,6 +609,9 @@ export function runRcPileGroupIncrementalAnalysis(
   const designGoverning = Object.entries(designState.responses).reduce((current, candidate) =>
     candidate[1].yieldRatio > current[1].yieldRatio ? candidate : current,
   );
+  const designLimitGoverning = Object.entries(designState.responses).reduce((current, candidate) =>
+    candidate[1].ultimateRatio > current[1].ultimateRatio ? candidate : current,
+  );
   const yieldPoint = designGoverning[1].envelope.points.find((point) => point.label === 'Y')!;
   const yieldFactor = Number.isFinite(yieldFactorFromCurve)
     ? yieldFactorFromCurve
@@ -559,10 +624,11 @@ export function runRcPileGroupIncrementalAnalysis(
     const pile = activePiles.find((candidate) => candidate.id === reaction.pileNodeId)!;
     const spec = pileSpecs[pile.pileSpecId];
     const response = designState.responses[pile.id];
-    const demand = evaluateMomentCurvatureDemand(response.envelope, Math.abs(response.maxMoment));
+    const demand = evaluateMomentCurvatureDemand(response.envelope, response.governingMoment);
+    const soilDiameter = getPileSoilInteractionDiameter(spec);
     const effectiveBeta = Math.pow(
-      (springsMap[pile.pileSpecId].kh * spec.diameter) /
-        (4 * Math.max(spec.modulusE * spec.momentOfInertiaI * 0.01, demand.effectiveFlexuralRigidity)),
+      (springsMap[pile.pileSpecId].kh * soilDiameter) /
+        (4 * Math.max(response.envelope.initialEI * 0.01, demand.effectiveFlexuralRigidity)),
       0.25,
     );
     return {
@@ -571,7 +637,7 @@ export function runRcPileGroupIncrementalAnalysis(
       modelType: response.envelope.modelType,
       axialForceForCurve: reaction.axialForceP,
       points: response.envelope.points,
-      demandMoment: round(Math.abs(response.maxMoment), 1),
+      demandMoment: round(response.governingMoment, 1),
       demandCurvature: demand.demandCurvature,
       ductilityRatio: demand.ductilityRatio,
       effectiveFlexuralRigidity: demand.effectiveFlexuralRigidity,
@@ -581,9 +647,11 @@ export function runRcPileGroupIncrementalAnalysis(
       iterations: response.iterations,
       converged: response.converged && designState.converged,
       isWithinUltimate: demand.isWithinUltimate,
+      governingDepth: round(response.governingDepth, 2),
+      governingSectionId: response.envelope.sectionSegmentId,
       notes: [
         ...response.envelope.notes,
-        '杭を20梁要素に分割し、各要素のM-φ割線EIと各節点の非線形地盤ばねを反復更新',
+        '杭を20梁要素に分割し、各要素の断面区分別M-φ割線EIと各節点の非線形地盤ばねを反復更新',
         '剛体底版の水平変位・回転を荷重増分ごとに釣合い計算',
       ],
     };
@@ -597,18 +665,19 @@ export function runRcPileGroupIncrementalAnalysis(
       yieldCheck: {
         governingPileNodeId: designGoverning[0],
         yieldMoment: yieldPoint.moment,
-        designMoment: round(Math.abs(designGoverning[1].maxMoment), 1),
+        designMoment: round(designGoverning[1].governingMoment, 1),
         yieldLoadFactor: round(yieldFactor, 3),
         yieldHorizontalLoad: round(Math.abs(loadCase.horizontalForceH) * yieldFactor, 1),
         yieldDisplacement: round(displacementAtFactor(states, yieldFactor), 3),
         ultimateLoadFactor: round(ultimateFactor, 3),
+        limitState: designLimitGoverning[1].envelope.modelType === 'bilinear' ? 'fully_plastic' : 'ultimate',
         hasYieldedAtDesignLoad: designState.yieldRatio >= 1,
         isWithinUltimateAtDesignLoad: designState.ultimateRatio <= 1,
         state: designState.point.state,
       },
       notes: [
-        '場所打ちRC杭を20要素に分割した荷重増分型の非線形Winkler解析',
-        '各増分で区間M-φ割線EI、地層別kH、地盤反力上限pHU、杭軸力を更新',
+        '鉛直の場所打ちRC杭・鋼管系杭を20要素に分割した荷重増分型の非線形Winkler解析',
+        '各増分で断面区分別M-φ割線EI、地層別kH、地盤反力上限pHU、杭軸力を更新',
         '地盤反力上限は土質強度から求める簡易p-y上限であり、適用基準の正式式との照合が必要',
       ],
     },
@@ -618,3 +687,6 @@ export function runRcPileGroupIncrementalAnalysis(
     checks,
   };
 }
+
+/** 既存呼出しとの互換用。 */
+export const runRcPileGroupIncrementalAnalysis = runPileGroupIncrementalAnalysis;

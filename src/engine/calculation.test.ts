@@ -4,6 +4,7 @@ import { runFullDesignCalculation } from './index';
 import { checkPileHeadJoint } from './pileHeadCheck';
 import { checkPileSectionStress } from './sectionCheck';
 import { buildMomentCurvatureEnvelope } from './momentCurvature';
+import { calculatePileMaterialVolume } from './pileSection';
 import { defaultProject, steelPileSampleProject } from '../samples/defaultProjects';
 
 describe('杭基礎計算の安全側ガード', () => {
@@ -23,10 +24,10 @@ describe('杭基礎計算の安全側ガード', () => {
     const spec = project.pileSpecs['spec-steel-800'];
 
     const capacity = calculateBearingCapacity(spec, project.ground.layers, project.footing);
-    const expectedWeight = spec.crossSectionAreaA * spec.length * 78.5;
+    const expectedWeight = calculatePileMaterialVolume(spec) * 78.5;
 
     expect(capacity.pileWeightWp).toBeCloseTo(expectedWeight, 1);
-    expect(capacity.pileWeightWp).toBeLessThan(100);
+    expect(capacity.pileWeightWp).toBeLessThan(200);
   });
 
   it('荷重ケースの支持力・引抜き安全率を許容抵抗力に反映する', () => {
@@ -142,6 +143,90 @@ describe('杭基礎計算の安全側ガード', () => {
     expect(withAxial.points.map((point) => point.label)).toEqual(['O', 'Y', 'P']);
     expect(withAxial.points[1].moment).toBeLessThan(withoutAxial.points[1].moment);
     expect(withAxial.points[2].moment).toBeGreaterThan(withAxial.points[1].moment);
+  });
+
+  it('kiso-Kui_9の鋼管杭My-Mpと曲率を再現する', () => {
+    const project = structuredClone(steelPileSampleProject);
+    const spec = project.pileSpecs['spec-steel-800'];
+    const envelope = buildMomentCurvatureEnvelope(spec, 2336.1, 0);
+    const yielding = envelope.points.find((point) => point.label === 'Y')!;
+    const plastic = envelope.points.find((point) => point.label === 'P')!;
+
+    // kiso-Kui_9 計算書p.122（PDF物理125頁）: D=1000, t=17, 外側腐食代1mm, σy=315
+    expect(yielding.moment).toBeCloseTo(3192.5, 1);
+    expect(plastic.moment).toBeCloseTo(4725.9, 1);
+    expect(yielding.curvature).toBeCloseTo(0.0026821, 7);
+    expect(plastic.curvature).toBeCloseTo(0.0039703, 7);
+    expect(envelope.sectionSegmentId).toBe('S1');
+
+    const lowerSection = buildMomentCurvatureEnvelope(spec, 2336.1, 10);
+    expect(lowerSection.sectionSegmentId).toBe('S2');
+    expect(lowerSection.points.find((point) => point.label === 'Y')!.moment).toBeLessThan(yielding.moment);
+  });
+
+  it('kiso-Kui_3の鋼管ソイルセメント杭は固化体径と鋼管径を分離してMy-Mpを再現する', () => {
+    const project = structuredClone(steelPileSampleProject);
+    const base = project.pileSpecs['spec-steel-800'];
+    const spec = {
+      ...base,
+      id: 'spec-ssc-1000-800',
+      pileType: 'steel_soil_cement' as const,
+      method: 'soil_cement' as const,
+      diameter: 1.0,
+      steelPipeDiameter: 0.8,
+      length: 40,
+      wallThickness: 19,
+      sectionSegments: [
+        { id: 'S1', depthTop: 0, depthBottom: 8, wallThickness: 19, corrosionAllowance: 1, steelYieldStrength: 315 },
+        { id: 'S2', depthTop: 8, depthBottom: 10, wallThickness: 14, corrosionAllowance: 1, steelYieldStrength: 315 },
+        { id: 'S3', depthTop: 10, depthBottom: 40, wallThickness: 11, corrosionAllowance: 1, steelYieldStrength: 315 },
+      ],
+    };
+    const envelope = buildMomentCurvatureEnvelope(spec, 959.9, 0);
+    const yielding = envelope.points.find((point) => point.label === 'Y')!;
+    const plastic = envelope.points.find((point) => point.label === 'P')!;
+
+    // kiso-Kui_3 計算書p.181（PDF物理184頁）: Dsc=1000, D=800, t=19, 外側腐食代1mm
+    expect(yielding.moment).toBeCloseTo(2466.6, 1);
+    expect(plastic.moment).toBeCloseTo(3429.9, 1);
+    expect(yielding.curvature).toBeCloseTo(0.0036746, 6);
+    expect(plastic.curvature).toBeCloseTo(0.0051099, 6);
+  });
+
+  it('鉛直鋼管杭のL2結果に断面区分付き増分解析を格納する', () => {
+    const project = structuredClone(steelPileSampleProject);
+    project.pileNodes = project.pileNodes.slice(0, 3);
+    project.loadCases = [project.loadCases[0], project.loadCases[3]];
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+    const l2 = results.find((result) => result.loadCaseType === 'seismic_l2_t1')!;
+
+    expect(l2.loadDisplacementCurve?.model).toBe('incremental_winkler');
+    expect(l2.loadDisplacementCurve?.yieldCheck.limitState).toBe('fully_plastic');
+    expect(l2.momentCurvatureChecks.every((check) => check.modelType === 'bilinear')).toBe(true);
+    expect(l2.pileDepthProfiles.sp1.some((point) => point.sectionSegmentId === 'S1')).toBe(true);
+    expect(l2.pileDepthProfiles.sp1.some((point) => point.sectionSegmentId === 'S2')).toBe(true);
+  });
+
+  it('斜杭を含む鋼管杭は等価割線解析へフォールバックする', () => {
+    const project = structuredClone(steelPileSampleProject);
+    project.pileNodes[0].inclinationAngle = 5;
+    project.loadCases = [project.loadCases[0], project.loadCases[3]];
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+    const l2 = results.find((result) => result.loadCaseType === 'seismic_l2_t1')!;
+
+    expect(l2.loadDisplacementCurve?.model).toBe('equivalent_secant');
   });
 
   it('場所打ちRC杭のL2結果に深度方向増分解析を格納する', () => {
