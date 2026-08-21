@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { CalculationResult } from '../../types/calculation';
 import { PileSpecification } from '../../types/pile';
 import { CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
+import { MomentCurvaturePanel } from './MomentCurvaturePanel';
+import { LoadDisplacementPanel } from './LoadDisplacementPanel';
+import { FootingCheckPanel } from './FootingCheckPanel';
+import { IncrementalDepthPanel } from './IncrementalDepthPanel';
 
 interface StressCheckViewProps {
   results: CalculationResult[];
@@ -42,6 +46,20 @@ export const StressCheckView: React.FC<StressCheckViewProps> = ({
           </button>
         ))}
       </div>
+
+      {currentResult.momentCurvatureChecks.length > 0 ? (
+        <MomentCurvaturePanel checks={currentResult.momentCurvatureChecks} />
+      ) : null}
+
+      {currentResult.loadDisplacementCurve ? (
+        <LoadDisplacementPanel curve={currentResult.loadDisplacementCurve} />
+      ) : null}
+
+      {currentResult.loadDisplacementCurve?.model === 'incremental_winkler' ? (
+        <IncrementalDepthPanel profiles={currentResult.pileDepthProfiles} />
+      ) : null}
+
+      <FootingCheckPanel check={currentResult.footingCheck} />
 
       {/* 杭体 断面応力度照査テーブル */}
       <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-4">

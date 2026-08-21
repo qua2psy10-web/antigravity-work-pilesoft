@@ -3,6 +3,7 @@ import { calculateAllowableCapacity, calculateBearingCapacity } from './bearingC
 import { runFullDesignCalculation } from './index';
 import { checkPileHeadJoint } from './pileHeadCheck';
 import { checkPileSectionStress } from './sectionCheck';
+import { buildMomentCurvatureEnvelope } from './momentCurvature';
 import { defaultProject, steelPileSampleProject } from '../samples/defaultProjects';
 
 describe('杭基礎計算の安全側ガード', () => {
@@ -92,5 +93,148 @@ describe('杭基礎計算の安全側ガード', () => {
 
     expect(check.virtualRcStressRatio).toBeGreaterThan(1);
     expect(check.isPass).toBe(false);
+  });
+
+  it('RC杭のM-φ骨格はO-C-Y-Uの単調なトリリニアになる', () => {
+    const project = structuredClone(defaultProject);
+    const envelope = buildMomentCurvatureEnvelope(project.pileSpecs['spec-rc-1200'], 1600);
+
+    expect(envelope.modelType).toBe('trilinear');
+    expect(envelope.points.map((point) => point.label)).toEqual(['O', 'C', 'Y', 'U']);
+    for (let index = 1; index < envelope.points.length; index++) {
+      expect(envelope.points[index].moment).toBeGreaterThan(envelope.points[index - 1].moment);
+      expect(envelope.points[index].curvature).toBeGreaterThan(envelope.points[index - 1].curvature);
+    }
+  });
+
+  it('kiso-Kui_1の場所打ち杭M-φ基準値を概ね再現する', () => {
+    const project = structuredClone(defaultProject);
+    const spec = project.pileSpecs['spec-rc-1200'];
+    spec.modulusE = 2.75e7;
+    spec.rebarDiameter = 25;
+    spec.rebarCount = 24;
+    spec.rebarCover = 150;
+    const envelope = buildMomentCurvatureEnvelope(spec, 1626.7);
+    const cracking = envelope.points.find((point) => point.label === 'C')!;
+    const yielding = envelope.points.find((point) => point.label === 'Y')!;
+    const ultimate = envelope.points.find((point) => point.label === 'U')!;
+
+    // kiso-Kui_1 p.142: Mc=602.5, My=1837.9, Mu=2634.4 kN·m
+    // φc=0.0002159, φy=0.0027591, φu=0.0266303 1/m
+    expect(cracking.moment / 602.5).toBeGreaterThan(0.9);
+    expect(cracking.moment / 602.5).toBeLessThan(1.1);
+    expect(yielding.moment / 1837.9).toBeGreaterThan(0.9);
+    expect(yielding.moment / 1837.9).toBeLessThan(1.1);
+    expect(ultimate.moment / 2634.4).toBeGreaterThan(0.9);
+    expect(ultimate.moment / 2634.4).toBeLessThan(1.1);
+    expect(cracking.curvature / 0.0002159).toBeGreaterThan(0.85);
+    expect(yielding.curvature / 0.0027591).toBeGreaterThan(0.85);
+    expect(ultimate.curvature / 0.0266303).toBeGreaterThan(0.85);
+  });
+
+  it('鋼管杭のM-φ骨格は腐食・軸力を反映したMy-Mpバイリニアになる', () => {
+    const project = structuredClone(steelPileSampleProject);
+    const spec = project.pileSpecs['spec-steel-800'];
+    const withAxial = buildMomentCurvatureEnvelope(spec, 1000);
+    const withoutAxial = buildMomentCurvatureEnvelope(spec, 0);
+
+    expect(withAxial.modelType).toBe('bilinear');
+    expect(withAxial.points.map((point) => point.label)).toEqual(['O', 'Y', 'P']);
+    expect(withAxial.points[1].moment).toBeLessThan(withoutAxial.points[1].moment);
+    expect(withAxial.points[2].moment).toBeGreaterThan(withAxial.points[1].moment);
+  });
+
+  it('場所打ちRC杭のL2結果に深度方向増分解析を格納する', () => {
+    const project = structuredClone(defaultProject);
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+    const normal = results.find((result) => result.loadCaseType === 'normal')!;
+    const l2 = results.find((result) => result.loadCaseType === 'seismic_l2_t1')!;
+
+    expect(normal.momentCurvatureChecks).toEqual([]);
+    expect(l2.momentCurvatureChecks).toHaveLength(project.pileNodes.length);
+    expect(l2.momentCurvatureChecks.every((check) => check.converged)).toBe(true);
+    expect(l2.loadDisplacementCurve?.model).toBe('incremental_winkler');
+    expect(l2.momentCurvatureChecks[0].axialForceForCurve).toBe(l2.pileReactions[0].axialForceP);
+    expect(l2.momentCurvatureChecks[0].axialForceForCurve).not.toBe(normal.pileReactions[0].axialForceP);
+    expect(l2.momentCurvatureChecks[0].effectiveStiffnessRatio).toBeLessThanOrEqual(1);
+    expect(l2.loadDisplacementCurve?.points).toHaveLength(16);
+    expect(l2.pileDepthProfiles.p1).toHaveLength(21);
+    expect(l2.pileDepthProfiles.p1.some((point) => point.curvaturePhi !== undefined)).toBe(true);
+    expect(l2.pileDepthProfiles.p1.some((point) => point.soilReactionLimit !== undefined)).toBe(true);
+    if (l2.loadDisplacementCurve!.yieldCheck.yieldLoadFactor > 1.5) {
+      expect(l2.loadDisplacementCurve!.yieldCheck.yieldDisplacement).toBeGreaterThan(
+        l2.loadDisplacementCurve!.points.at(-1)!.displacement,
+      );
+    }
+    expect(l2.loadDisplacementCurve!.designDisplacement).toBeGreaterThanOrEqual(
+      Math.abs(l2.footingDisplacement.deltaX),
+    );
+    for (let index = 1; index < l2.loadDisplacementCurve!.points.length; index++) {
+      expect(l2.loadDisplacementCurve!.points[index].horizontalLoad).toBeGreaterThan(
+        l2.loadDisplacementCurve!.points[index - 1].horizontalLoad,
+      );
+      expect(l2.loadDisplacementCurve!.points[index].displacement).toBeGreaterThan(
+        l2.loadDisplacementCurve!.points[index - 1].displacement,
+      );
+    }
+  });
+
+  it('L2応答がM-φ終局点を超えると全体判定をNGにする', () => {
+    const project = structuredClone(defaultProject);
+    const l2Load = project.loadCases.find((loadCase) => loadCase.type === 'seismic_l2_t1')!;
+    l2Load.horizontalForceH = 200_000;
+    l2Load.momentM = 2_000_000;
+
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+    const l2 = results.find((result) => result.loadCaseType === 'seismic_l2_t1')!;
+
+    expect(l2.momentCurvatureChecks.some((check) => !check.isWithinUltimate)).toBe(true);
+    expect(l2.loadDisplacementCurve?.yieldCheck.hasYieldedAtDesignLoad).toBe(true);
+    expect(l2.loadDisplacementCurve?.yieldCheck.isWithinUltimateAtDesignLoad).toBe(false);
+    expect(l2.isStable).toBe(false);
+  });
+
+  it('底版詳細照査を全荷重ケースに作成する', () => {
+    const project = structuredClone(defaultProject);
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+
+    expect(results.every((result) => result.footingCheck.directions.length === 2)).toBe(true);
+    expect(results.every((result) => result.footingCheck.punching.capacity > 0)).toBe(true);
+  });
+
+  it('薄い底版・疎な配筋は底版照査をNGにする', () => {
+    const project = structuredClone(defaultProject);
+    project.footing.thickness = 0.5;
+    project.footing.topRebarSpacingX = 1000;
+    project.footing.bottomRebarSpacingX = 1000;
+    project.footing.topRebarSpacingY = 1000;
+    project.footing.bottomRebarSpacingY = 1000;
+    const results = runFullDesignCalculation(
+      project.ground,
+      project.pileSpecs,
+      project.pileNodes,
+      project.footing,
+      project.loadCases,
+    );
+
+    expect(results.some((result) => !result.footingCheck.isPass)).toBe(true);
   });
 });

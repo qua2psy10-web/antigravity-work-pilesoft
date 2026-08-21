@@ -227,7 +227,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">鋼管肉厚 t (mm)</label>
                 <input
@@ -255,11 +255,20 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">鋼材基準強度 (N/mm²)</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">許容圧縮応力度 (N/mm²)</label>
                 <input
                   type="number"
                   value={spec.allowableCompressiveStress || 140}
                   onChange={(e) => handleUpdate({ allowableCompressiveStress: parseFloat(e.target.value) || 140 })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">降伏強度 σy (N/mm²)</label>
+                <input
+                  type="number"
+                  value={spec.steelYieldStrength ?? 235}
+                  onChange={(e) => handleUpdate({ steelYieldStrength: parseFloat(e.target.value) || 235 })}
                   className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>

@@ -3,6 +3,7 @@ import { PileSpecification, PileNode, FootingDimension } from '../types/pile';
 import { LoadCase } from '../types/load';
 import {
   CalculationResult,
+  MomentCurvatureCheckResult,
   PileCapacityCheckResult,
   PileDepthStressPoint,
   PileHeadJointCheckResult,
@@ -19,6 +20,13 @@ import { solvePileGroupDisplacement } from './matrixSolver';
 import { calculatePileDepthProfile } from './pileStress';
 import { checkPileSectionStress } from './sectionCheck';
 import { checkPileHeadJoint } from './pileHeadCheck';
+import { analyzeNonlinearPileSection } from './momentCurvature';
+import { buildLoadDisplacementCurve } from './loadDisplacement';
+import { checkFootingSlab } from './footingCheck';
+import {
+  canRunRcIncrementalAnalysis,
+  runRcPileGroupIncrementalAnalysis,
+} from './incrementalNonlinear';
 
 /**
  * 杭基礎設計 全体一括計算エンジン
@@ -34,6 +42,7 @@ export function runFullDesignCalculation(
     throw new Error('杭仕様を少なくとも 1 件入力してください');
   }
   const pileNodeById = new Map(pileNodes.map((node) => [node.id, node]));
+  const loadCaseById = new Map(loadCases.map((loadCase) => [loadCase.id, loadCase]));
   for (const node of pileNodes) {
     if (!node.isOmitted && !pileSpecs[node.pileSpecId]) {
       throw new Error(`杭節点 ${node.id} に設定された杭仕様 ${node.pileSpecId} が見つかりません`);
@@ -45,6 +54,8 @@ export function runFullDesignCalculation(
 
   // 2. 各荷重ケースに対する安定計算・断面計算
   const results: CalculationResult[] = [];
+  const effectiveLayersByLoadCase: Record<string, typeof ground.layers> = {};
+  const springsByLoadCase: Record<string, Record<string, ReturnType<typeof calculateSubgradeReactionAndSprings>>> = {};
 
   for (const loadCase of loadCases) {
     const seismicReduction: SeismicReductionLevel = loadCase.type === 'seismic_l1'
@@ -73,6 +84,7 @@ export function runFullDesignCalculation(
         deLevel2: lr?.deLevel2 ?? 1.0,
       };
     });
+    effectiveLayersByLoadCase[loadCase.id] = effectiveLayers;
 
     // 杭仕様ごとに支持力・バネを算定する。
     const bearingBySpec: Record<string, ReturnType<typeof calculateBearingCapacity>> = {};
@@ -84,7 +96,6 @@ export function runFullDesignCalculation(
         seismicReduction
       );
     }
-
     // 各杭仕様のバネマトリックス算定
     const springsMap: Record<string, ReturnType<typeof calculateSubgradeReactionAndSprings>> = {};
     for (const specId in pileSpecs) {
@@ -97,6 +108,7 @@ export function runFullDesignCalculation(
         bearingBySpec[specId].kv
       );
     }
+    springsByLoadCase[loadCase.id] = springsMap;
 
     // 杭基礎全体の変位法連立方程式求解
     const solveRes = solvePileGroupDisplacement(
@@ -208,8 +220,9 @@ export function runFullDesignCalculation(
     const isDispOk = maxDisplacement <= loadCase.allowableDisplacement;
     const isSectionAllOk = sectionChecks.every((c) => c.isPass);
     const isJointAllOk = jointChecks.every((c) => c.isPass);
+    const footingCheck = checkFootingSlab(loadCase.id, footing, solveRes.reactions);
 
-    const isStable = isBearingOk && isPulloutOk && isDispOk && isSectionAllOk && isJointAllOk;
+    const isStable = isBearingOk && isPulloutOk && isDispOk && isSectionAllOk && isJointAllOk && footingCheck.isPass;
 
     results.push({
       loadCaseId: loadCase.id,
@@ -222,6 +235,8 @@ export function runFullDesignCalculation(
       bearingCapacity: bearingBySpec[defaultSpecId],
       sectionChecks,
       jointChecks,
+      momentCurvatureChecks: [],
+      footingCheck,
       pileCapacityChecks,
       allowableBearingKn: governingCapacityCheck.allowableBearing,
       allowablePulloutKn: governingCapacityCheck.allowablePullout,
@@ -231,6 +246,137 @@ export function runFullDesignCalculation(
       maxAxialTensionKn: maxTension,
       isStable,
     });
+  }
+
+  // 鉛直の場所打ちRC杭は深度方向の非線形Winkler増分解析を行う。
+  // その他の杭種・斜杭は、既存の杭単体M-φ割線反復へフォールバックする。
+  const normalResult = results.find((result) => result.loadCaseType === 'normal');
+  const normalAxialByPile = new Map(
+    normalResult?.pileReactions.map((reaction) => [reaction.pileNodeId, reaction.axialForceP]) ?? [],
+  );
+
+  for (const result of results) {
+    if (result.loadCaseType !== 'seismic_l2_t1' && result.loadCaseType !== 'seismic_l2_t2') continue;
+    const loadCase = loadCaseById.get(result.loadCaseId);
+    if (!loadCase) continue;
+    const springsMap = springsByLoadCase[result.loadCaseId];
+    const effectiveLayers = effectiveLayersByLoadCase[result.loadCaseId];
+
+    if (canRunRcIncrementalAnalysis(pileNodes, pileSpecs)) {
+      const incremental = runRcPileGroupIncrementalAnalysis(
+        ground,
+        effectiveLayers,
+        pileSpecs,
+        pileNodes,
+        footing,
+        loadCase,
+        springsMap,
+      );
+      result.pileReactions = incremental.designReactions;
+      result.footingDisplacement = incremental.designDisplacement;
+      result.pileDepthProfiles = incremental.designProfiles;
+      result.momentCurvatureChecks = incremental.checks;
+      result.loadDisplacementCurve = incremental.curve;
+      result.maxDisplacementMm = incremental.curve.designDisplacement;
+      result.sectionChecks = incremental.designReactions.map((reaction) => {
+        const node = pileNodeById.get(reaction.pileNodeId)!;
+        const profile = incremental.designProfiles[node.id];
+        const maxMomentPoint = profile.reduce((current, point) =>
+          Math.abs(point.momentM) > Math.abs(current.momentM) ? point : current,
+        );
+        const maxShearPoint = profile.reduce((current, point) =>
+          Math.abs(point.shearForceS) > Math.abs(current.shearForceS) ? point : current,
+        );
+        return checkPileSectionStress(
+          pileSpecs[node.pileSpecId],
+          loadCase,
+          node.id,
+          maxMomentPoint.momentM,
+          maxMomentPoint.depthZ,
+          reaction.axialForceP,
+          maxShearPoint.shearForceS,
+        );
+      });
+      result.jointChecks = incremental.designReactions.map((reaction) => {
+        const node = pileNodeById.get(reaction.pileNodeId)!;
+        return checkPileHeadJoint(
+          pileSpecs[node.pileSpecId],
+          footing,
+          loadCase,
+          node.id,
+          reaction.axialForceP,
+          reaction.shearForceH,
+          reaction.bendingMomentM,
+        );
+      });
+      result.pileCapacityChecks = result.pileCapacityChecks.map((check) => {
+        const reaction = incremental.designReactions.find((item) => item.pileNodeId === check.pileNodeId)!;
+        return {
+          ...check,
+          axialForceP: reaction.axialForceP,
+          isBearingOk: reaction.axialForceP <= check.allowableBearing,
+          isPulloutOk: Math.max(0, -reaction.axialForceP) <= check.allowablePullout,
+        };
+      });
+      result.footingCheck = checkFootingSlab(loadCase.id, footing, incremental.designReactions);
+      result.maxAxialCompressionKn = Math.max(0, ...incremental.designReactions.map((reaction) => reaction.axialForceP));
+      result.maxAxialTensionKn = Math.min(0, ...incremental.designReactions.map((reaction) => reaction.axialForceP));
+    } else {
+
+      const nonlinearChecks: MomentCurvatureCheckResult[] = [];
+      const updatedSectionChecks: SectionStressCheckResult[] = [];
+      const updatedProfiles: Record<string, PileDepthStressPoint[]> = { ...result.pileDepthProfiles };
+
+      for (const reaction of result.pileReactions) {
+        const node = pileNodeById.get(reaction.pileNodeId);
+        if (!node) continue;
+        const spec = pileSpecs[node.pileSpecId];
+        const hasNormalAxialForce = normalAxialByPile.has(node.id);
+        const axialForceForCurve = normalAxialByPile.get(node.id) ?? reaction.axialForceP;
+        const nonlinear = analyzeNonlinearPileSection(
+          spec,
+          reaction,
+          springsMap[node.pileSpecId].kh,
+          footing,
+          axialForceForCurve,
+        );
+        if (!hasNormalAxialForce) {
+          nonlinear.check.notes.push('常時荷重ケースがないため、当該L2ケースの軸力でM-φ骨格を作成');
+        }
+        nonlinearChecks.push(nonlinear.check);
+        updatedProfiles[node.id] = nonlinear.profile;
+        updatedSectionChecks.push(checkPileSectionStress(
+          spec,
+          loadCase,
+          node.id,
+          nonlinear.maxMoment,
+          nonlinear.maxMomentDepth,
+          reaction.axialForceP,
+          nonlinear.maxShear,
+        ));
+      }
+
+      result.momentCurvatureChecks = nonlinearChecks;
+      result.loadDisplacementCurve = buildLoadDisplacementCurve(
+        nonlinearChecks,
+        loadCase.horizontalForceH,
+        loadCase.momentM,
+        result.maxDisplacementMm,
+      );
+      result.maxDisplacementMm = result.loadDisplacementCurve.designDisplacement;
+      result.pileDepthProfiles = updatedProfiles;
+      result.sectionChecks = updatedSectionChecks;
+    }
+    const isCapacityOk = result.pileCapacityChecks.every((check) => check.isBearingOk && check.isPulloutOk);
+    const isDisplacementOk = result.maxDisplacementMm <= result.allowableDisplacementMm;
+    const isSectionOk = result.sectionChecks.every((check) => check.isPass);
+    const isJointOk = result.jointChecks.every((check) => check.isPass);
+    const isMomentCurvatureOk = result.momentCurvatureChecks.every(
+      (check) => check.isWithinUltimate && check.converged,
+    );
+    const isYieldUltimateOk = result.loadDisplacementCurve.yieldCheck.isWithinUltimateAtDesignLoad;
+    result.isStable = isCapacityOk && isDisplacementOk && isSectionOk && isJointOk &&
+      isMomentCurvatureOk && isYieldUltimateOk && result.footingCheck.isPass;
   }
 
   return results;

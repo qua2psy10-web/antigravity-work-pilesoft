@@ -35,6 +35,11 @@
 
 /* 印刷用スタイル */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
   body {
     background: white !important;
     color: black !important;
@@ -47,5 +52,21 @@
   }
   .print-page-break {
     page-break-before: always;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  article {
+    width: 100% !important;
+  }
+
+  table,
+  tr,
+  td,
+  th {
+    break-inside: avoid;
   }
 }
