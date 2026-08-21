@@ -24,8 +24,8 @@ import { analyzeNonlinearPileSection } from './momentCurvature';
 import { buildLoadDisplacementCurve } from './loadDisplacement';
 import { checkFootingSlab } from './footingCheck';
 import {
-  canRunRcIncrementalAnalysis,
-  runRcPileGroupIncrementalAnalysis,
+  canRunPileGroupIncrementalAnalysis,
+  runPileGroupIncrementalAnalysis,
 } from './incrementalNonlinear';
 
 /**
@@ -248,7 +248,7 @@ export function runFullDesignCalculation(
     });
   }
 
-  // 鉛直の場所打ちRC杭は深度方向の非線形Winkler増分解析を行う。
+  // 対応する鉛直杭は深度方向の非線形Winkler増分解析を行う。
   // その他の杭種・斜杭は、既存の杭単体M-φ割線反復へフォールバックする。
   const normalResult = results.find((result) => result.loadCaseType === 'normal');
   const normalAxialByPile = new Map(
@@ -262,8 +262,8 @@ export function runFullDesignCalculation(
     const springsMap = springsByLoadCase[result.loadCaseId];
     const effectiveLayers = effectiveLayersByLoadCase[result.loadCaseId];
 
-    if (canRunRcIncrementalAnalysis(pileNodes, pileSpecs)) {
-      const incremental = runRcPileGroupIncrementalAnalysis(
+    if (canRunPileGroupIncrementalAnalysis(pileNodes, pileSpecs)) {
+      const incremental = runPileGroupIncrementalAnalysis(
         ground,
         effectiveLayers,
         pileSpecs,

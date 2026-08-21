@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => onResetToSample('steel')}
               className="px-2.5 py-1 text-slate-700 hover:text-blue-600 font-medium rounded hover:bg-white transition-all"
-              title="鋼管杭斜杭モデルをロード"
+              title="板厚区分付き鋼管杭モデルをロード"
             >
               鋼管杭例
             </button>

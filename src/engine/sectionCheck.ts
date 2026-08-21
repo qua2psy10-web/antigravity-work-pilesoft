@@ -1,6 +1,7 @@
 import { PileSpecification } from '../types/pile';
 import { LoadCase } from '../types/load';
 import { SectionStressCheckResult } from '../types/calculation';
+import { resolvePileSectionAtDepth } from './pileSection';
 
 /**
  * 杭体の断面応力度照査 (RC杭・鋼管杭)
@@ -17,9 +18,10 @@ export function checkPileSectionStress(
   maxShearForceS: number
 ): SectionStressCheckResult {
   const stressFactor = loadCase.allowableStressFactor; // 許容応力度割増係数 (常時1.0, 地震時1.50)
-  const D = spec.diameter; // m
-  const A = spec.crossSectionAreaA; // m²
-  const I = spec.momentOfInertiaI;   // m⁴
+  const sectionSpec = resolvePileSectionAtDepth(spec, maxMomentDepthZ).spec;
+  const D = sectionSpec.diameter; // m
+  const A = sectionSpec.crossSectionAreaA; // m²
+  const I = sectionSpec.momentOfInertiaI;   // m⁴
   if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(A) || A <= 0 || !Number.isFinite(I) || I <= 0) {
     throw new Error('断面照査には杭径、断面積、断面二次モーメントの正しい入力が必要です');
   }
@@ -28,14 +30,14 @@ export function checkPileSectionStress(
   const notes: string[] = [];
   let isPass = true;
 
-  if (spec.pileType === 'cast_in_place_rc' || spec.pileType === 'phc' || spec.pileType === 'sc') {
+  if (sectionSpec.pileType === 'cast_in_place_rc' || sectionSpec.pileType === 'phc' || sectionSpec.pileType === 'sc') {
     // === 場所打ちRC杭 / 既製コンクリート杭の照査 ===
-    const fck = spec.concreteStrengthFck || 24.0; // N/mm²
+    const fck = sectionSpec.concreteStrengthFck || 24.0; // N/mm²
     
     // 基本許容応力度 (道示IV)
-    const baseSigCa = spec.allowableCompressiveStress ?? fck / 3.0;
-    const baseSigSa = spec.allowableTensileStress ?? 180.0;
-    const baseTauA = spec.allowableShearStress ?? 0.36;
+    const baseSigCa = sectionSpec.allowableCompressiveStress ?? fck / 3.0;
+    const baseSigSa = sectionSpec.allowableTensileStress ?? 180.0;
+    const baseTauA = sectionSpec.allowableShearStress ?? 0.36;
 
     const allowableSigCa = baseSigCa * stressFactor;
     const allowableSigSa = baseSigSa * stressFactor;
@@ -94,8 +96,8 @@ export function checkPileSectionStress(
     };
   } else {
     // === 鋼管杭 / H形鋼杭の照査 ===
-    const baseSteelSigA = spec.allowableCompressiveStress ?? 140.0;
-    const baseSteelTauA = spec.allowableShearStress ?? 80.0;
+    const baseSteelSigA = sectionSpec.allowableCompressiveStress ?? 140.0;
+    const baseSteelTauA = sectionSpec.allowableShearStress ?? 80.0;
     const allowableSteelSigA = baseSteelSigA * stressFactor;
     const allowableSteelTauA = baseSteelTauA * stressFactor;
 
@@ -127,6 +129,9 @@ export function checkPileSectionStress(
 
     if (isPass) {
       notes.push('鋼材許容応力度を満足しています (OK)');
+    }
+    if (sectionSpec.wallThickness) {
+      notes.push(`照査断面 z=${maxMomentDepthZ.toFixed(2)}m、t=${sectionSpec.wallThickness.toFixed(1)}mm`);
     }
 
     return {

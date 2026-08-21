@@ -6,6 +6,7 @@ const stateLabel = {
   elastic: '弾性',
   cracked: 'ひび割れ',
   yielded: '降伏',
+  fully_plastic: '全塑性',
   ultimate_exceeded: '終局超過',
 };
 
@@ -13,6 +14,7 @@ const stateClass = {
   elastic: 'bg-emerald-50 text-emerald-700',
   cracked: 'bg-amber-50 text-amber-800',
   yielded: 'bg-orange-100 text-orange-800',
+  fully_plastic: 'bg-red-100 text-red-800',
   ultimate_exceeded: 'bg-red-100 text-red-800',
 };
 
@@ -27,6 +29,7 @@ export function IncrementalDepthPanel({ profiles }: { profiles: Record<string, P
   const maxSoil = profile.reduce((current, point) =>
     (point.soilYieldRatio ?? 0) > (current.soilYieldRatio ?? 0) ? point : current,
   );
+  const hasSectionSegments = profile.some((point) => point.sectionSegmentId);
 
   return (
     <section className="space-y-4 rounded-lg border border-indigo-200 bg-white p-5 shadow-sm">
@@ -65,9 +68,9 @@ export function IncrementalDepthPanel({ profiles }: { profiles: Record<string, P
       </div>
 
       <div className="max-h-[460px] overflow-auto rounded border border-slate-200">
-        <table className="w-full min-w-[780px] border-collapse text-center text-xs">
+        <table className="w-full min-w-[860px] border-collapse text-center text-xs">
           <thead className="sticky top-0 bg-slate-100 text-slate-700">
-            <tr><th className="p-2">z (m)</th><th>M (kN·m)</th><th>φ (1/m)</th><th>EIeff/EI0</th><th>p / pHU</th><th>y (mm)</th><th>杭体状態</th></tr>
+            <tr><th className="p-2">z (m)</th>{hasSectionSegments ? <><th>断面区間</th><th>t (mm)</th></> : null}<th>M (kN·m)</th><th>φ (1/m)</th><th>EIeff/EI0</th><th>p / pHU</th><th>y (mm)</th><th>杭体状態</th></tr>
           </thead>
           <tbody>
             {profile.map((point) => {
@@ -75,6 +78,7 @@ export function IncrementalDepthPanel({ profiles }: { profiles: Record<string, P
               return (
                 <tr key={point.depthZ} className="border-t border-slate-200 font-mono">
                   <td className="p-2">{point.depthZ.toFixed(2)}</td>
+                  {hasSectionSegments ? <><td className="font-sans font-bold">{point.sectionSegmentId ?? '-'}</td><td>{point.sectionWallThickness?.toFixed(1) ?? '-'}</td></> : null}
                   <td>{point.momentM.toFixed(1)}</td>
                   <td>{point.curvaturePhi?.toExponential(3)}</td>
                   <td>{point.effectiveStiffnessRatio?.toFixed(3)}</td>

@@ -10,6 +10,7 @@ const stateLabels: Record<MomentCurvatureState, string> = {
   elastic: '弾性域',
   cracked: 'ひび割れ後',
   yielded: '降伏後',
+  fully_plastic: '全塑性到達',
   ultimate_exceeded: '終局超過',
 };
 
@@ -58,7 +59,7 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
           </h3>
           <p className="mt-1 text-[11px] text-slate-500">
             {isIncremental
-              ? '各増分の杭軸力で骨格曲線を更新し、深度区間ごとの割線EIを反復計算'
+              ? '各増分の杭軸力と断面区分で骨格曲線を更新し、深度区間ごとの割線EIを反復計算'
               : '死荷重時軸力で骨格曲線を作成し、応答点の割線EIで杭単体Chang解を反復更新'}
           </p>
         </div>
@@ -118,6 +119,7 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
           <dl className="grid grid-cols-2 border border-slate-200 text-xs">
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">{isIncremental ? '解析時軸力' : '死荷重時軸力'}</dt><dd className="border-b border-slate-200 p-2 font-mono">{fmt(selected.axialForceForCurve, 1)} kN</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">応答 M</dt><dd className="border-b border-slate-200 p-2 font-mono">{fmt(selected.demandMoment, 1)} kN·m</dd>
+            {selected.governingDepth !== undefined ? <><dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">支配断面</dt><dd className="border-b border-slate-200 p-2 font-mono">z={selected.governingDepth.toFixed(2)}m{selected.governingSectionId ? ` / ${selected.governingSectionId}` : ''}</dd></> : null}
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">応答 φ</dt><dd className="border-b border-slate-200 p-2 font-mono">{selected.demandCurvature.toExponential(4)} 1/m</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">曲率塑性率</dt><dd className="border-b border-slate-200 p-2 font-mono">μφ = {fmt(selected.ductilityRatio, 3)}</dd>
             <dt className="border-b border-r border-slate-200 bg-slate-50 p-2 font-bold">有効剛性比</dt><dd className="border-b border-slate-200 p-2 font-mono">EIeff/EI0 = {fmt(selected.effectiveStiffnessRatio, 3)}</dd>
@@ -141,7 +143,7 @@ export const MomentCurvaturePanel: React.FC<MomentCurvaturePanelProps> = ({ chec
 
       <p className="border-l-4 border-amber-400 bg-amber-50 p-3 text-[11px] leading-5 text-amber-950">
         {isIncremental
-          ? '場所打ちRC杭は剛体底版と杭―地盤系を荷重増分ごとに釣合い計算しています。地盤反力上限pHUは簡易p-yモデルのため、正式設計では適用基準の式・上限値と照合してください。底版は別途線形照査です。'
+          ? '対応する鉛直RC杭・鋼管系杭は剛体底版と杭―地盤系を荷重増分ごとに釣合い計算しています。地盤反力上限pHUは簡易p-yモデルのため、正式設計では適用基準の式・上限値と照合してください。底版は別途線形照査です。'
           : '本結果は杭1本ごとのM-φ割線剛性反復です。地盤ばねの塑性化を含む杭基礎全体系の荷重増分解析、軸力変動、底版非線形は別途確認が必要です。'}
       </p>
     </section>

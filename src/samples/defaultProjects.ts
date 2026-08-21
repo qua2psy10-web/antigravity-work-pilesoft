@@ -201,44 +201,48 @@ export const defaultProject: ProjectData = {
 };
 
 /**
- * 鋼管杭基礎サンプル (3列×3行 斜杭併用)
+ * kiso-Kui_9を参考にした板厚区分付き鋼管杭基礎サンプル (3列×3行)
  */
 export const steelPileSampleProject: ProjectData = {
   ...defaultProject,
   project: {
     ...defaultProject.project,
     id: 'sample_steel_02',
-    title: '鋼管杭基礎設計例 (φ800mm 斜杭配置)',
+    title: '鋼管杭基礎設計例 (φ1000mm 板厚区分)',
     bridgeName: '臨海大橋 A1橋台杭基礎',
   },
   pileSpecs: {
     'spec-steel-800': {
       id: 'spec-steel-800',
       pileType: 'steel_pipe',
-      method: 'driven_hammer',
+      method: 'inner_excavation',
       bearingType: 'end_bearing',
-      diameter: 0.8,
-      length: 22.0,
-      wallThickness: 12.0,
+      diameter: 1.0,
+      length: 36.9,
+      wallThickness: 17.0,
       corrosionAllowance: 1.0,
       modulusE: 2.0e8, // 200,000 N/mm² = 2.0e8 kN/m²
-      momentOfInertiaI: 0.0038, // m⁴
-      crossSectionAreaA: 0.0298, // m²
+      momentOfInertiaI: Math.PI * (0.998 ** 4 - 0.966 ** 4) / 64,
+      crossSectionAreaA: Math.PI * (0.998 ** 2 - 0.966 ** 2) / 4,
       allowableCompressiveStress: 140.0,
       allowableTensileStress: 140.0,
       allowableShearStress: 80.0,
-      steelYieldStrength: 235.0,
+      steelYieldStrength: 315.0,
+      sectionSegments: [
+        { id: 'S1', depthTop: 0, depthBottom: 8.9, wallThickness: 17, corrosionAllowance: 1, steelYieldStrength: 315 },
+        { id: 'S2', depthTop: 8.9, depthBottom: 36.9, wallThickness: 12, corrosionAllowance: 1, steelYieldStrength: 235 },
+      ],
     },
   },
   pileNodes: [
-    { id: 'sp1', rowIndex: 0, colIndex: 0, x: -2.0, y: -2.0, inclinationAngle: -5, pileSpecId: 'spec-steel-800' },
+    { id: 'sp1', rowIndex: 0, colIndex: 0, x: -2.0, y: -2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
     { id: 'sp2', rowIndex: 0, colIndex: 1, x: 0.0, y: -2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
-    { id: 'sp3', rowIndex: 0, colIndex: 2, x: 2.0, y: -2.0, inclinationAngle: 5, pileSpecId: 'spec-steel-800' },
-    { id: 'sp4', rowIndex: 1, colIndex: 0, x: -2.0, y: 0.0, inclinationAngle: -5, pileSpecId: 'spec-steel-800' },
+    { id: 'sp3', rowIndex: 0, colIndex: 2, x: 2.0, y: -2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
+    { id: 'sp4', rowIndex: 1, colIndex: 0, x: -2.0, y: 0.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
     { id: 'sp5', rowIndex: 1, colIndex: 1, x: 0.0, y: 0.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
-    { id: 'sp6', rowIndex: 1, colIndex: 2, x: 2.0, y: 0.0, inclinationAngle: 5, pileSpecId: 'spec-steel-800' },
-    { id: 'sp7', rowIndex: 2, colIndex: 0, x: -2.0, y: 2.0, inclinationAngle: -5, pileSpecId: 'spec-steel-800' },
+    { id: 'sp6', rowIndex: 1, colIndex: 2, x: 2.0, y: 0.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
+    { id: 'sp7', rowIndex: 2, colIndex: 0, x: -2.0, y: 2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
     { id: 'sp8', rowIndex: 2, colIndex: 1, x: 0.0, y: 2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
-    { id: 'sp9', rowIndex: 2, colIndex: 2, x: 2.0, y: 2.0, inclinationAngle: 5, pileSpecId: 'spec-steel-800' },
+    { id: 'sp9', rowIndex: 2, colIndex: 2, x: 2.0, y: 2.0, inclinationAngle: 0, pileSpecId: 'spec-steel-800' },
   ],
 };

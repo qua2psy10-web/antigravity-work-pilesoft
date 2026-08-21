@@ -1,6 +1,7 @@
 import { SoilLayer } from '../types/soil';
 import { PileSpecification, FootingDimension } from '../types/pile';
 import { BearingCapacityResult } from '../types/calculation';
+import { calculatePileMaterialVolume } from './pileSection';
 
 export type SeismicReductionLevel = 'none' | 'l1' | 'l2';
 
@@ -162,8 +163,8 @@ export function calculateBearingCapacity(
   const isSteelPile = steelPileTypes.has(spec.pileType);
   const unitWeightPile = isSteelPile ? 78.5 : 24.5; // kN/m³
   // 先端面積 Ap は支持力用、断面積 A は杭自重用。鋼管杭を中実円柱として扱わない。
-  const pileWeightArea = isSteelPile ? spec.crossSectionAreaA : Ap;
-  const pileWeightWp = pileWeightArea * L * unitWeightPile;
+  const pileWeightVolume = isSteelPile ? calculatePileMaterialVolume(spec) : Ap * L;
+  const pileWeightWp = pileWeightVolume * unitWeightPile;
 
   // 許容押込み力 Ra。H24道示IVでは支持杭=3/2、摩擦杭=4/3（常時/暴風・L1）。
   const raNormal = ru / (spec.bearingType === 'friction' ? 4.0 : 3.0);

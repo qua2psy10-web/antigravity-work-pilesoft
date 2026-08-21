@@ -14,7 +14,8 @@ const stateRank: Record<MomentCurvatureState, number> = {
   elastic: 0,
   cracked: 1,
   yielded: 2,
-  ultimate_exceeded: 3,
+  fully_plastic: 3,
+  ultimate_exceeded: 4,
 };
 
 function responseAtMoment(check: MomentCurvatureCheckResult, moment: number) {
@@ -39,7 +40,7 @@ function responseAtMoment(check: MomentCurvatureCheckResult, moment: number) {
 
   if (demand > ultimate.moment) {
     curvature = ultimate.curvature + (demand - ultimate.moment) / (initialEI * 0.01);
-    state = 'ultimate_exceeded';
+    state = check.modelType === 'bilinear' ? 'fully_plastic' : 'ultimate_exceeded';
   } else if (demand >= yielding.moment) {
     state = 'yielded';
   } else if (cracking && demand >= cracking.moment) {
@@ -136,6 +137,7 @@ export function buildLoadDisplacementCurve(
       yieldHorizontalLoad: round(Math.abs(horizontalLoad) * governingYield.yieldFactor, 1),
       yieldDisplacement: yieldPoint.displacement,
       ultimateLoadFactor: round(governingUltimate.ultimateFactor, 3),
+      limitState: governingUltimate.check.modelType === 'bilinear' ? 'fully_plastic' : 'ultimate',
       hasYieldedAtDesignLoad: governingYield.yieldFactor <= 1,
       isWithinUltimateAtDesignLoad: governingUltimate.ultimateFactor >= 1,
       state: designPoint.state,

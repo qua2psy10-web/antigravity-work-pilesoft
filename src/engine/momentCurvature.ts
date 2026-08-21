@@ -7,11 +7,16 @@ import {
 } from '../types/calculation';
 import { FootingDimension, PileSpecification } from '../types/pile';
 import { calculatePileDepthProfile } from './pileStress';
+import { resolvePileSectionAtDepth, type ResolvedPileSection } from './pileSection';
 
 export interface MomentCurvatureEnvelope {
   modelType: 'trilinear' | 'bilinear';
   initialEI: number;
   points: MomentCurvaturePoint[];
+  sectionSegmentId?: string;
+  sectionDepthTop?: number;
+  sectionDepthBottom?: number;
+  wallThickness?: number;
   notes: string[];
 }
 
@@ -99,28 +104,75 @@ function buildRcEnvelope(spec: PileSpecification, axialForce: number): MomentCur
   };
 }
 
-function buildSteelEnvelope(spec: PileSpecification, axialForce: number): MomentCurvatureEnvelope {
-  const D = spec.diameter;
-  const t = (spec.wallThickness ?? Math.max(9, D * 15)) / 1000;
-  const corrosion = clamp((spec.corrosionAllowance ?? 0) / 1000, 0, Math.max(0, t - 0.001));
-  const effectiveOuterDiameter = Math.max(D * 0.5, D - 2 * corrosion);
-  const innerDiameter = Math.max(0, D - 2 * t);
-  const effectiveArea = Math.PI * (effectiveOuterDiameter ** 2 - innerDiameter ** 2) / 4;
-  const effectiveI = Math.PI * (effectiveOuterDiameter ** 4 - innerDiameter ** 4) / 64;
+function circleAreaAbove(radius: number, ordinate: number) {
+  if (ordinate <= -radius) return Math.PI * radius ** 2;
+  if (ordinate >= radius) return 0;
+  return radius ** 2 * Math.acos(ordinate / radius) -
+    ordinate * Math.sqrt(radius ** 2 - ordinate ** 2);
+}
+
+function circleFirstMomentAbove(radius: number, ordinate: number) {
+  if (ordinate <= -radius || ordinate >= radius) return 0;
+  return (2 / 3) * Math.pow(radius ** 2 - ordinate ** 2, 1.5);
+}
+
+/** 軸力で移動する塑性中立軸を解き、円環断面の全塑性モーメントを求める。 */
+function calculateAnnularPlasticMoment(
+  outerDiameter: number,
+  innerDiameter: number,
+  yieldStress: number,
+  axialForce: number,
+) {
+  const outerRadius = outerDiameter / 2;
+  const innerRadius = innerDiameter / 2;
+  const area = Math.PI * (outerRadius ** 2 - innerRadius ** 2);
+  const yieldForce = yieldStress * 1000 * area;
+  const targetForce = clamp(Math.abs(axialForce), 0, yieldForce * 0.95);
+  let lower = -outerRadius;
+  let upper = outerRadius;
+  for (let iteration = 0; iteration < 80; iteration++) {
+    const ordinate = (lower + upper) / 2;
+    const compressionArea = circleAreaAbove(outerRadius, ordinate) -
+      circleAreaAbove(innerRadius, ordinate);
+    const force = yieldStress * 1000 * (2 * compressionArea - area);
+    if (force > targetForce) lower = ordinate;
+    else upper = ordinate;
+  }
+  const neutralAxis = (lower + upper) / 2;
+  return 2 * yieldStress * 1000 * (
+    circleFirstMomentAbove(outerRadius, neutralAxis) -
+    circleFirstMomentAbove(innerRadius, neutralAxis)
+  );
+}
+
+function buildSteelEnvelope(section: ResolvedPileSection, axialForce: number): MomentCurvatureEnvelope {
+  const spec = section.spec;
+  const effectiveOuterDiameter = section.effectiveOuterDiameter;
+  const innerDiameter = section.innerDiameter;
+  const effectiveArea = section.area;
+  const effectiveI = section.inertia;
   const elasticZ = effectiveI / (effectiveOuterDiameter / 2);
-  const plasticZ = (effectiveOuterDiameter ** 3 - innerDiameter ** 3) / 6;
-  const initialEI = spec.modulusE * spec.momentOfInertiaI;
+  const initialEI = spec.modulusE * effectiveI;
   const fy = spec.steelYieldStrength ?? (spec.allowableCompressiveStress ?? 140) * 1.68;
-  const axialRatio = clamp(Math.abs(axialForce) / (fy * 1000 * effectiveArea), 0, 0.95);
   const availableYieldStress = Math.max(fy * 1000 * 0.05, fy * 1000 - Math.abs(axialForce) / effectiveArea);
   const yieldMoment = availableYieldStress * elasticZ;
-  const plasticMoment = Math.max(yieldMoment * 1.01, fy * 1000 * plasticZ * (1 - axialRatio ** 2));
+  const plasticMoment = Math.max(
+    yieldMoment * 1.01,
+    calculateAnnularPlasticMoment(effectiveOuterDiameter, innerDiameter, fy, axialForce),
+  );
   const yieldCurvature = yieldMoment / initialEI;
   const plasticCurvature = plasticMoment / initialEI;
+  const segmentNote = section.segment
+    ? `断面区間 ${section.segment.id}: z=${round(section.segment.depthTop, 3)}～${round(section.segment.depthBottom, 3)}m、t=${round(spec.wallThickness ?? 0, 1)}mm`
+    : `一様断面 t=${round(spec.wallThickness ?? 0, 1)}mm`;
 
   return {
     modelType: 'bilinear',
     initialEI,
+    sectionSegmentId: section.segment?.id,
+    sectionDepthTop: section.segment?.depthTop,
+    sectionDepthBottom: section.segment?.depthBottom,
+    wallThickness: spec.wallThickness,
     points: [
       makePoint('O', 0, 0),
       makePoint('Y', yieldMoment, yieldCurvature),
@@ -129,7 +181,8 @@ function buildSteelEnvelope(spec: PileSpecification, axialForce: number): Moment
     notes: [
       '鋼管系杭は全塑性モーメントMpを上限とするバイリニア骨格を使用',
       `鋼材降伏強度 ${round(fy, 0)}N/mm²、腐食後有効外径 ${round(effectiveOuterDiameter * 1000, 1)}mm`,
-      'My・Mpには死荷重時軸力と腐食後有効断面を反映',
+      segmentNote,
+      'My・Mpには軸力と腐食後有効断面を反映し、Mpは塑性中立軸の移動を考慮',
     ],
   };
 }
@@ -137,16 +190,19 @@ function buildSteelEnvelope(spec: PileSpecification, axialForce: number): Moment
 export function buildMomentCurvatureEnvelope(
   spec: PileSpecification,
   axialForce: number,
+  depthFromPileHead = 0,
 ): MomentCurvatureEnvelope {
-  if (!Number.isFinite(spec.diameter) || spec.diameter <= 0 ||
-      !Number.isFinite(spec.modulusE) || spec.modulusE <= 0 ||
-      !Number.isFinite(spec.momentOfInertiaI) || spec.momentOfInertiaI <= 0 ||
-      !Number.isFinite(spec.crossSectionAreaA) || spec.crossSectionAreaA <= 0) {
+  const section = resolvePileSectionAtDepth(spec, depthFromPileHead);
+  const resolvedSpec = section.spec;
+  if (!Number.isFinite(resolvedSpec.diameter) || resolvedSpec.diameter <= 0 ||
+      !Number.isFinite(resolvedSpec.modulusE) || resolvedSpec.modulusE <= 0 ||
+      !Number.isFinite(resolvedSpec.momentOfInertiaI) || resolvedSpec.momentOfInertiaI <= 0 ||
+      !Number.isFinite(resolvedSpec.crossSectionAreaA) || resolvedSpec.crossSectionAreaA <= 0) {
     throw new Error('M-φ解析には正しい杭径、断面積、断面二次モーメント、ヤング係数が必要です');
   }
 
-  const isRcFamily = spec.pileType === 'cast_in_place_rc' || spec.pileType === 'phc' || spec.pileType === 'sc';
-  return isRcFamily ? buildRcEnvelope(spec, axialForce) : buildSteelEnvelope(spec, axialForce);
+  const isRcFamily = resolvedSpec.pileType === 'cast_in_place_rc' || resolvedSpec.pileType === 'phc' || resolvedSpec.pileType === 'sc';
+  return isRcFamily ? buildRcEnvelope(resolvedSpec, axialForce) : buildSteelEnvelope(section, axialForce);
 }
 
 export function evaluateMomentCurvatureDemand(
@@ -178,7 +234,7 @@ export function evaluateMomentCurvatureDemand(
   if (!withinUltimate) {
     const residualStiffness = envelope.initialEI * 0.01;
     curvature = lastPoint.curvature + (demand - lastPoint.moment) / residualStiffness;
-    state = 'ultimate_exceeded';
+    state = envelope.modelType === 'bilinear' ? 'fully_plastic' : 'ultimate_exceeded';
   }
 
   const secantEI = demand > 0 && curvature > 0 ? demand / curvature : envelope.initialEI;

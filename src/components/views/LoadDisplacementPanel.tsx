@@ -6,6 +6,7 @@ const stateLabel = {
   elastic: '弾性域',
   cracked: 'ひび割れ後',
   yielded: '降伏到達',
+  fully_plastic: '全塑性到達',
   ultimate_exceeded: '終局超過',
 };
 
@@ -75,11 +76,11 @@ export const LoadDisplacementPanel: React.FC<{ curve: LoadDisplacementCurveResul
               <dt className="text-slate-500">初降伏荷重倍率</dt><dd className="font-mono font-black">λy = {yieldCheck.yieldLoadFactor.toFixed(3)}</dd>
               <dt className="text-slate-500">初降伏 H</dt><dd className="font-mono">{yieldCheck.yieldHorizontalLoad.toLocaleString()} kN</dd>
               <dt className="text-slate-500">初降伏 δ</dt><dd className="font-mono">{yieldCheck.yieldDisplacement.toFixed(2)} mm</dd>
-              <dt className="text-slate-500">終局荷重倍率</dt><dd className="font-mono">λu = {yieldCheck.ultimateLoadFactor.toFixed(3)}</dd>
+              <dt className="text-slate-500">{yieldCheck.limitState === 'fully_plastic' ? '全塑性荷重倍率' : '終局荷重倍率'}</dt><dd className="font-mono">{yieldCheck.limitState === 'fully_plastic' ? 'λp' : 'λu'} = {yieldCheck.ultimateLoadFactor.toFixed(3)}</dd>
             </dl>
           </div>
           <div className={`rounded border p-3 text-xs font-bold ${yieldCheck.hasYieldedAtDesignLoad ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
-            設計荷重時：{yieldCheck.hasYieldedAtDesignLoad ? '初降伏到達' : '初降伏前'} ／ 終局：{yieldCheck.isWithinUltimateAtDesignLoad ? '未到達' : '超過'}
+            設計荷重時：{yieldCheck.hasYieldedAtDesignLoad ? '初降伏到達' : '初降伏前'} ／ {yieldCheck.limitState === 'fully_plastic' ? '全塑性' : '終局'}：{yieldCheck.isWithinUltimateAtDesignLoad ? '未到達' : '到達・超過'}
           </div>
         </div>
       </div>

@@ -28,12 +28,22 @@ export type PileHeadJointType =
   | 'hinge'             // ヒンジ結合
   | 'semi_rigid';       // 弾性バネ結合
 
+export interface PileSectionSegment {
+  id: string;
+  depthTop: number;          // 杭頭からの区間上端 z (m)
+  depthBottom: number;       // 杭頭からの区間下端 z (m)
+  wallThickness: number;     // 鋼管肉厚 t (mm)
+  corrosionAllowance?: number; // 外側腐食代 (mm)
+  steelYieldStrength?: number;  // 区間ごとの降伏強度 σy (N/mm²)
+}
+
 export interface PileSpecification {
   id: string;
   pileType: PileType;
   method: PileMethod;
   bearingType: PileBearingType;
   diameter: number;         // 杭径 D (m, 例: 1.0, 1.2, 1.5)
+  steelPipeDiameter?: number; // 鋼管ソイルセメント杭の鋼管径 (m)。diameter は固化体径
   length: number;           // 杭長 L (m)
   wallThickness?: number;   // 鋼管肉厚 t (mm, 鋼管杭用)
   corrosionAllowance?: number; // 腐食代 (mm, 鋼管杭用, 例: 1.0mm)
@@ -51,6 +61,7 @@ export interface PileSpecification {
   allowableTensileStress?: number;     // 許容引張鉄筋応力度 (N/mm²)
   allowableShearStress?: number;       // 許容せん断応力度 (N/mm²)
   steelYieldStrength?: number;         // 鋼管の降伏強度 σy (N/mm², 例: SKK400=235, SKK490=315)
+  sectionSegments?: PileSectionSegment[]; // 杭頭からの鋼管板厚・材質区分
 }
 
 export interface PileNode {

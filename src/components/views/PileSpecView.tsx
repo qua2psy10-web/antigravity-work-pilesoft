@@ -1,8 +1,9 @@
 import React from 'react';
-import { PileSpecification, PileType, PileMethod, PileBearingType, FootingDimension } from '../../types/pile';
+import { PileSpecification, PileType, PileMethod, PileBearingType, FootingDimension, PileSectionSegment } from '../../types/pile';
 import { GroundCondition } from '../../types/soil';
 import { calculateBearingCapacity } from '../../engine/bearingCapacity';
 import { Layers, Activity, CheckCircle, Info } from 'lucide-react';
+import { resolvePileSectionAtDepth } from '../../engine/pileSection';
 
 function calculateCircularSectionProperties(spec: PileSpecification): Pick<PileSpecification, 'crossSectionAreaA' | 'momentOfInertiaI'> {
   const D = spec.diameter;
@@ -14,13 +15,10 @@ function calculateCircularSectionProperties(spec: PileSpecification): Pick<PileS
   }
 
   if (spec.pileType === 'steel_pipe' || spec.pileType === 'steel_soil_cement' || spec.pileType === 'rotary_steel') {
-    const wallThickness = spec.wallThickness ?? 12.0;
-    const corrosionAllowance = spec.corrosionAllowance ?? 0.0;
-    const effectiveThickness = Math.max(0, (wallThickness - corrosionAllowance) / 1000);
-    const innerDiameter = Math.max(0, D - 2.0 * effectiveThickness);
+    const resolved = resolvePileSectionAtDepth(spec, 0);
     return {
-      crossSectionAreaA: (Math.PI * (D ** 2 - innerDiameter ** 2)) / 4.0,
-      momentOfInertiaI: (Math.PI * (D ** 4 - innerDiameter ** 4)) / 64.0,
+      crossSectionAreaA: resolved.area,
+      momentOfInertiaI: resolved.inertia,
     };
   }
 
@@ -50,6 +48,8 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
 
   const bearingNormal = calculateBearingCapacity(spec, ground.layers, footing, false);
   const bearingSeismic = calculateBearingCapacity(spec, ground.layers, footing, true);
+  const isSteelCircular = spec.pileType === 'steel_pipe' ||
+    spec.pileType === 'steel_soil_cement' || spec.pileType === 'rotary_steel';
   const normalBearingFactor = spec.bearingType === 'friction' ? 4.0 : 3.0;
   const seismicBearingFactor = spec.bearingType === 'friction' ? 3.0 : 2.0;
 
@@ -65,6 +65,54 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
       ...pileSpecs,
       [activeSpecId]: newSpec,
     });
+  };
+
+  const updateSectionSegments = (sectionSegments: PileSectionSegment[]) => {
+    handleUpdate({ sectionSegments });
+  };
+
+  const handleSectionUpdate = (index: number, updated: Partial<PileSectionSegment>) => {
+    const sectionSegments = [...(spec.sectionSegments ?? [])];
+    sectionSegments[index] = { ...sectionSegments[index], ...updated };
+    updateSectionSegments(sectionSegments);
+  };
+
+  const handleAddSection = () => {
+    const sections = [...(spec.sectionSegments ?? [])].sort((a, b) => a.depthTop - b.depthTop);
+    if (sections.length === 0) {
+      updateSectionSegments([{
+        id: 'S1',
+        depthTop: 0,
+        depthBottom: spec.length,
+        wallThickness: spec.wallThickness ?? 12,
+        corrosionAllowance: spec.corrosionAllowance ?? 0,
+        steelYieldStrength: spec.steelYieldStrength ?? 235,
+      }]);
+      return;
+    }
+    const last = sections[sections.length - 1];
+    const midpoint = (last.depthTop + last.depthBottom) / 2;
+    if (midpoint <= last.depthTop || midpoint >= last.depthBottom) return;
+    sections[sections.length - 1] = { ...last, depthBottom: midpoint };
+    sections.push({
+      ...last,
+      id: `S${sections.length + 1}`,
+      depthTop: midpoint,
+    });
+    updateSectionSegments(sections);
+  };
+
+  const handleRemoveSection = (index: number) => {
+    const sections = [...(spec.sectionSegments ?? [])].sort((a, b) => a.depthTop - b.depthTop);
+    if (sections.length <= 1) {
+      handleUpdate({ sectionSegments: undefined });
+      return;
+    }
+    const removed = sections[index];
+    sections.splice(index, 1);
+    if (index > 0) sections[index - 1] = { ...sections[index - 1], depthBottom: removed.depthBottom };
+    else sections[0] = { ...sections[0], depthTop: removed.depthTop };
+    updateSectionSegments(sections);
   };
 
   return (
@@ -106,6 +154,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                 <option value="driven_hammer">打込み杭工法 (打撃)</option>
                 <option value="pre_boring">プレボーリング杭工法</option>
                 <option value="inner_excavation">中掘り杭工法</option>
+                <option value="soil_cement">鋼管ソイルセメント杭工法</option>
                 <option value="rotary">回転圧入工法</option>
               </select>
             </div>
@@ -126,7 +175,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">杭径 D (m)</label>
+              <label className="block text-xs font-bold text-slate-600 mb-1">{spec.pileType === 'steel_soil_cement' ? '固化体径 Dsc (m)' : '杭径 D (m)'}</label>
               <input
                 type="number"
                 step="0.1"
@@ -135,6 +184,18 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                 className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-blue-700 font-bold font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
+            {spec.pileType === 'steel_soil_cement' ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">鋼管径 D (m)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={spec.steelPipeDiameter ?? spec.diameter}
+                  onChange={(e) => handleUpdate({ steelPipeDiameter: parseFloat(e.target.value) || spec.diameter })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-blue-700 font-bold font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            ) : null}
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">杭長 L (m)</label>
               <input
@@ -227,6 +288,7 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
               </div>
             </div>
           ) : (
+            <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">鋼管肉厚 t (mm)</label>
@@ -272,6 +334,48 @@ export const PileSpecView: React.FC<PileSpecViewProps> = ({
                   className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
+            </div>
+            {isSteelCircular ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-black text-slate-700">深度方向の鋼管断面区分</div>
+                    <div className="mt-1 text-[10px] text-slate-500">杭頭からの z 範囲ごとに板厚・腐食代・降伏強度を設定</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddSection}
+                    className="rounded border border-blue-300 bg-white px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                  >
+                    {spec.sectionSegments?.length ? '最下区間を分割' : '断面区分を設定'}
+                  </button>
+                </div>
+                {spec.sectionSegments?.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[680px] border-collapse text-center text-xs">
+                      <thead className="bg-slate-100 text-slate-600">
+                        <tr><th className="p-2">区間</th><th>上端 z (m)</th><th>下端 z (m)</th><th>t (mm)</th><th>腐食代 (mm)</th><th>σy (N/mm²)</th><th>操作</th></tr>
+                      </thead>
+                      <tbody>
+                        {spec.sectionSegments.map((segment, index) => (
+                          <tr key={segment.id} className="border-t border-slate-200">
+                            <td className="p-1.5"><input value={segment.id} onChange={(e) => handleSectionUpdate(index, { id: e.target.value })} className="w-16 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><input type="number" step="0.1" value={segment.depthTop} onChange={(e) => handleSectionUpdate(index, { depthTop: Math.max(0, Number(e.target.value)) })} className="w-20 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><input type="number" step="0.1" value={segment.depthBottom} onChange={(e) => handleSectionUpdate(index, { depthBottom: Math.min(spec.length, Math.max(0, Number(e.target.value))) })} className="w-20 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><input type="number" step="1" value={segment.wallThickness} onChange={(e) => handleSectionUpdate(index, { wallThickness: Math.max(1, Number(e.target.value)) })} className="w-20 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><input type="number" step="0.5" value={segment.corrosionAllowance ?? 0} onChange={(e) => handleSectionUpdate(index, { corrosionAllowance: Math.max(0, Number(e.target.value)) })} className="w-20 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><input type="number" step="5" value={segment.steelYieldStrength ?? spec.steelYieldStrength ?? 235} onChange={(e) => handleSectionUpdate(index, { steelYieldStrength: Math.max(1, Number(e.target.value)) })} className="w-24 rounded border border-slate-300 bg-white px-2 py-1 font-mono" /></td>
+                            <td><button type="button" onClick={() => handleRemoveSection(index)} className="rounded px-2 py-1 font-bold text-red-600 hover:bg-red-50">削除</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-[11px] leading-5 text-slate-600">未設定時は全長に共通の鋼管肉厚・腐食代・降伏強度を使用します。</p>
+                )}
+              </div>
+            ) : null}
             </div>
           )}
         </div>

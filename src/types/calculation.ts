@@ -39,6 +39,8 @@ export interface PileDepthStressPoint {
   soilReactionP: number;// 地盤反力度 p (kN/m)
   curvaturePhi?: number; // 曲率 φ (1/m)
   sectionState?: MomentCurvatureState; // 杭体状態
+  sectionSegmentId?: string; // 適用した鋼管断面区間ID
+  sectionWallThickness?: number; // 適用した鋼管肉厚 (mm)
   effectiveStiffnessRatio?: number; // 区間割線EI / 初期EI
   soilReactionLimit?: number; // 地盤反力上限 pHU (kN/m)
   soilYieldRatio?: number; // |p| / pHU
@@ -111,6 +113,7 @@ export type MomentCurvatureState =
   | 'elastic'
   | 'cracked'
   | 'yielded'
+  | 'fully_plastic'
   | 'ultimate_exceeded';
 
 export interface MomentCurvaturePoint {
@@ -136,6 +139,8 @@ export interface MomentCurvatureCheckResult {
   iterations: number;
   converged: boolean;
   isWithinUltimate: boolean;
+  governingDepth?: number; // 支配断面の杭頭からの深度 (m)
+  governingSectionId?: string; // 支配鋼管断面区間ID
   notes: string[];
 }
 
@@ -163,6 +168,7 @@ export interface YieldCheckResult {
   yieldHorizontalLoad: number; // kN
   yieldDisplacement: number; // mm
   ultimateLoadFactor: number;
+  limitState: 'ultimate' | 'fully_plastic';
   hasYieldedAtDesignLoad: boolean;
   isWithinUltimateAtDesignLoad: boolean;
   state: MomentCurvatureState;
